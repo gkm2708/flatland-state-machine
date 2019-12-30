@@ -1,0 +1,8 @@
+{
+  "challenge_id": "/home/gaurav/flatland-state-machine/scratch/test-envs/Test_1/Level_0.pkl",
+  "grader_id": "/home/gaurav/flatland-state-machine/scratch/test-envs/Test_1/Level_0.pkl",
+  "authors": ["mohanty"],
+  "description": "Random Agent for Flatland Challenge.",
+  "debug" : true
+}
+
