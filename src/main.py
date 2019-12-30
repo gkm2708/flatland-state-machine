@@ -141,9 +141,11 @@ def main(args, dir):
 			#	state_machine_action_dict.update({a: state_machine_action})
 			#	railenv_action_dict.update({a: railenv_action})
 
+			#for a in range(env.get_num_agents()):
+			state_machine_action = sm.act(state) # State machine picks action
+
 			for a in range(env.get_num_agents()):
-				state_machine_action = sm.act(state, a) # State machine picks action
-				railenv_action = observation_builder.choose_railenv_action(a, state_machine_action)
+				railenv_action = observation_builder.choose_railenv_action(a, state_machine_action[a])
 				state_machine_action_dict.update({a: state_machine_action})
 				railenv_action_dict.update({a: railenv_action})
 
