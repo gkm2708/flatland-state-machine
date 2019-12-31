@@ -4,10 +4,10 @@ import os
 import pickle
 import sys
 import numpy as np
-import torch
-from tqdm import trange
-from knockknock import telegram_sender
-from pathlib import Path
+# import torch
+# from tqdm import trange
+# from knockknock import telegram_sender
+# from pathlib import Path
 
 # These 2 lines must go before the import from src/
 #base_dir = Path(__file__).resolve().parent.parent.parent
@@ -131,8 +131,8 @@ def main(args, dir):
 			#if ep < 14 and step > 1:
 			#	break
 
-			#if ep >= 15 and step > 5:
-			#	print("x")
+			if step % 10 == 0:
+				print(step)
 
 			#for a in range(env.get_num_agents()):
 			#	#state_machine_action = act(args.prediction_depth, state[a], a) # State machine picks action
@@ -153,7 +153,7 @@ def main(args, dir):
 			state, reward, done, info = env.step(railenv_action_dict)  # Env step
 
 			if args.generate_baseline:
-				env_renderer.render_env(show=False, show_observations=False, show_predictions=True)
+				env_renderer.render_env(show=True, show_observations=False, show_predictions=True)
 			else:
 				env_renderer.render_env(show=True, show_observations=False, show_predictions=True)
 
@@ -259,12 +259,12 @@ if __name__ == '__main__':
 	parser.add_argument('--prediction-depth', type=int, default=200, help='Prediction depth for shortest path strategy, i.e. length of a path')
 	parser.add_argument('--num-episodes', type=int, default=100, help='Number of episodes to run')
 	parser.add_argument('--debug', action='store_true', default=False, help='Print debug info')
-	parser.add_argument('--generate-baseline', action='store_true', default=False, help='Print debug info')
-	parser.add_argument('--save-image', action='store_true', default=True, help='Print debug info')
+	parser.add_argument('--generate-baseline', type=str, default='', help='--generate-baseline 6,12,13,14')
+	parser.add_argument('--save-image', type=int, default=1, help='Save image')
 
 	args = parser.parse_args()
 
-	if args.generate_baseline:
+	if len(args.generate_baseline) > 0:
 		parser.set_defaults(num_episodes=1)
 		"""
 		for i in range(1,100):
@@ -272,7 +272,8 @@ if __name__ == '__main__':
 			args = parser.parse_args()
 			main(args, i)
 		"""
-		for i in (4, 8, 13, 15, 43, 50):
+		for i in args.generate_baseline.split(','):
+			i = int(i)
 			parser.set_defaults(seed=i)
 			args = parser.parse_args()
 			main(args, i)
