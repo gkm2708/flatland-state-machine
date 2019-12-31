@@ -4,19 +4,14 @@ import os
 import pickle
 import sys
 import numpy as np
-# import torch
-# from tqdm import trange
-# from knockknock import telegram_sender
-# from pathlib import Path
 
-# These 2 lines must go before the import from src/
-#base_dir = Path(__file__).resolve().parent.parent.parent
-#sys.path.append(str(base_dir))
-#print(base_dir)
+#import torch
+#from tqdm import trange
+#from knockknock import telegram_sender
+#from pathlib import Path
+
 base_dir = "/home/gaurav/flatland-state-machine"
 sys.path.append(base_dir)
-#sys.path.append("/home/gaurav/flatland-state-machine/src")
-print(base_dir)
 
 from flatland.envs.rail_env import RailEnv
 from flatland.envs.rail_generators import sparse_rail_generator, rail_from_file, complex_rail_generator
@@ -80,10 +75,7 @@ def main(args, dir):
 	env_renderer = RenderTool(
 		env,
 		agent_render_variant=AgentRenderVariant.AGENT_SHOWS_OPTIONS_AND_BOX,
-		show_debug=True,
-		#screen_height=1080,
-		#screen_width=1920
-		)
+		show_debug=True)
 
 	sm = stateMachine()
 	trigger = Trigger()
@@ -121,34 +113,16 @@ def main(args, dir):
 
 		trigger.setGlobals(args.prediction_depth, env.get_num_agents())
 
-		#if ep != 20:
-		#	max_time_steps = 1
-		#else:
-		#	max_time_steps = 200
-
 		for step in range(max_time_steps):
-
-			#if ep < 14 and step > 1:
-			#	break
 
 			if step % 10 == 0:
 				print(step)
 
-			#for a in range(env.get_num_agents()):
-			#	#state_machine_action = act(args.prediction_depth, state[a], a) # State machine picks action
-			#	state_machine_action = sm.act(args.prediction_depth, state[a], a) # State machine picks action
-			#	railenv_action = observation_builder.choose_railenv_action(a, state_machine_action)
-			#	state_machine_action_dict.update({a: state_machine_action})
-			#	railenv_action_dict.update({a: railenv_action})
-
-			#for a in range(env.get_num_agents()):
 			state_machine_action = sm.act(state) # State machine picks action
-
 			for a in range(env.get_num_agents()):
 				railenv_action = observation_builder.choose_railenv_action(a, state_machine_action[a])
 				state_machine_action_dict.update({a: state_machine_action})
 				railenv_action_dict.update({a: railenv_action})
-
 
 			state, reward, done, info = env.step(railenv_action_dict)  # Env step
 
@@ -208,33 +182,25 @@ def main(args, dir):
 			if done[a]:
 				num_done_agents += 1
 		percentage_done_agents = num_done_agents / env.get_num_agents()
-		log("Done agents in episode: {}".format(percentage_done_agents))
+		log("\nDone agents in episode: {}".format(percentage_done_agents))
 		T_num_done_agents.append(percentage_done_agents)  # In proportion to total
 		T_all_done.append(all_done)
 		
-
 	# Average number of agents that reached their target
 	avg_done_agents = sum(T_num_done_agents) / len(T_num_done_agents)  if len(T_num_done_agents) > 0 else 0
 	avg_reward = sum(T_rewards) / len(T_rewards) if len(T_rewards) > 0 else 0
 	avg_norm_reward = avg_reward / (max_time_steps / env.get_num_agents())
 
-	if total_episodes != 0:
-		s = "\nSeed: " + str(args.seed) \
-			+ "\tAvg_done_agents: " + str(avg_done_agents)\
-			+ "\tAvg_reward: " + str(avg_reward)\
-			+ "\tAvg_norm_reward: " + str(avg_norm_reward)\
-			+ "\tMax_time_steps: " + str(max_time_steps)\
-			+ "\tAvg_time_steps: " + str(total_step_taken/total_episodes)
-	else:
-		s = "\nSeed: " + str(args.seed) \
-			+ "\tAvg_done_agents: " + str(avg_done_agents)\
-			+ "\tAvg_reward: " + str(avg_reward)\
-			+ "\tAvg_norm_reward: " + str(avg_norm_reward)\
-			+ "\tMax_time_steps: " + str(max_time_steps)\
-			+ "\tAvg_time_steps: " + str(total_step_taken)
+	if total_episodes == 0:
+		total_episodes = 1
 
-	log(s)
-	
+	log("\nSeed: " + str(args.seed) \
+			+ "\tAvg_done_agents: " + str(avg_done_agents)\
+			+ "\tAvg_reward: " + str(avg_reward)\
+			+ "\tAvg_norm_reward: " + str(avg_norm_reward)\
+			+ "\tMax_time_steps: " + str(max_time_steps)\
+			+ "\tAvg_time_steps: " + str(total_step_taken/total_episodes))
+
 	
 if __name__ == '__main__':
 
@@ -247,7 +213,7 @@ if __name__ == '__main__':
 	parser.add_argument('--height', type=int, default=20, help='Environment height')
 	parser.add_argument('--num-agents', type=int, default=4, help='Number of agents in the environment')
 	parser.add_argument('--max-num-cities', type=int, default=2, help='Maximum number of cities where agents can start or end')
-	parser.add_argument('--seed', type=int, default=8, help='Seed used to generate grid environment randomly')
+	parser.add_argument('--seed', type=int, default=98, help='Seed used to generate grid environment randomly')
 	parser.add_argument('--grid-mode', type=bool, default=True, help='Type of city distribution, if False cities are randomly placed')
 	parser.add_argument('--max-rails-between-cities', type=int, default=3, help='Max number of tracks allowed between cities, these count as entry points to a city')
 	parser.add_argument('--max-rails-in-city', type=int, default=3, help='Max number of parallel tracks within a city allowed')
@@ -257,7 +223,7 @@ if __name__ == '__main__':
 	parser.add_argument('--observation-builder', type=str, default='GraphObsForRailEnv', help='Class to use to build observation for agent')
 	parser.add_argument('--predictor', type=str, default='ShortestPathPredictorForRailEnv', help='Class used to predict agent paths and help observation building')
 	parser.add_argument('--prediction-depth', type=int, default=200, help='Prediction depth for shortest path strategy, i.e. length of a path')
-	parser.add_argument('--num-episodes', type=int, default=100, help='Number of episodes to run')
+	parser.add_argument('--num-episodes', type=int, default=1, help='Number of episodes to run')
 	parser.add_argument('--debug', action='store_true', default=False, help='Print debug info')
 	parser.add_argument('--generate-baseline', type=str, default='', help='--generate-baseline 6,12,13,14')
 	parser.add_argument('--save-image', type=int, default=1, help='Save image')
