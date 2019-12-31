@@ -46,6 +46,8 @@ class stateMachine():
 									decision = random.randint(0,2)
 								else:
 									decision = 0
+						else:
+							decision = 0
 				local_decision_vector[ca] = decision
 			decision_dict[a] = np.max(local_decision_vector)
 
