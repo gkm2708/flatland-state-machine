@@ -1,8 +1,9 @@
 {
-  "challenge_id": "/home/gaurav/flatland-state-machine/scratch/test-envs/Test_1/Level_0.pkl",
-  "grader_id": "/home/gaurav/flatland-state-machine/scratch/test-envs/Test_1/Level_0.pkl",
-  "authors": ["mohanty"],
-  "description": "Random Agent for Flatland Challenge.",
-  "debug" : true
+  "challenge_id": "aicrowd_flatland_challenge_2019",
+  "grader_id": "aicrowd_flatland_challenge_2019",
+  "authors": ["cit-ec.de"],
+  "description": "sample description about your awesome agent",
+  "license": "MIT",
+  "debug": false
 }
 
