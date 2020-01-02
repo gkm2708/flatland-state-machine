@@ -62,14 +62,29 @@ class TestBattery():
                 # Which Agent ?
                 # final1["agent_id"] = a
                 #
+                #if observations[a]["path"][ca][0][0] != 0 or observations[a]["path"][ca][0][1] != 0:
+                #    final1[ca] = final2
                 final1[ca] = final2
                 #
             final[a] = final1
-        return final
+
+        final3 = {}
+        for a in range(0, len(self.env.agents)):
+            final3[a] = self.check_target(a, observations)
+
+        final4 = {}
+        final4["main"] = final
+        final4["target"] = final3
+
+        return final4
 
     # Test 1 and 2 : Check if agent is entering conflict zone with another agent
     def entering_cz(self, a, b, observations):
-        return 1 if observations[a]["per_agent_occupancy_in_time"][b][0] > 0 else 0
+        return 0 if observations[a]["path"][a][0][0] == 0 and observations[a]["path"][a][0][1] == 0 else \
+            1 if observations[a]["per_agent_occupancy_in_time"][b][0] > 0 else 0
+
+    def check_target(self,a, observations):
+        return 1 if observations[a]["path"][a][0][0] == 0 and observations[a]["path"][a][0][1] == 0 else 0
 
     # Test 3 : Check if agent and conflicting agent are in opposing direction
     def check_direction(self, handle1, handle2):
