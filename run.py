@@ -7,8 +7,6 @@ from pathlib import Path
 base_dir = Path(__file__).resolve().parent
 print(str(base_dir))
 sys.path.append(str(base_dir))
-base_dir = "/home/gaurav/Flatland/flatland-state-machine"
-sys.path.append(base_dir)
 
 from flatland.evaluators.client import FlatlandRemoteClient
 from src.graph_observations import GraphObsForRailEnv
