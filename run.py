@@ -7,11 +7,14 @@ from pathlib import Path
 base_dir = Path(__file__).resolve().parent
 print(str(base_dir))
 sys.path.append(str(base_dir))
+base_dir = "/home/gaurav/Flatland/flatland-state-machine"
+sys.path.append(base_dir)
 
 from flatland.evaluators.client import FlatlandRemoteClient
 from src.graph_observations import GraphObsForRailEnv
 from src.predictions import ShortestPathPredictorForRailEnv
-from src.state_machine import act
+from src.state_machine import stateMachine
+from src.test_battery import TestBattery
 
 prediction_depth = 200
 
@@ -20,8 +23,7 @@ prediction_depth = 200
 #####################################################################
 remote_client = FlatlandRemoteClient()
 
-
-observation_builder = GraphObsForRailEnv(predictor=ShortestPathPredictorForRailEnv(max_depth=prediction_depth))
+observation_builder = GraphObsForRailEnv(predictor=ShortestPathPredictorForRailEnv(max_depth=prediction_depth),bfs_depth=4)
 
 #####################################################################
 # Main evaluation loop
@@ -80,6 +82,9 @@ while True:
     local_env = remote_client.env
     number_of_agents = len(local_env.agents)
 
+    sm = stateMachine()
+    tb = TestBattery(local_env)
+
     # Now we enter into another infinite loop where we 
     # compute the actions for all the individual steps in this episode
     # until the episode is `done`
@@ -100,6 +105,7 @@ while True:
     all_done = False
     
     while True:
+
         #####################################################################
         # Evaluation of a single episode
         #
@@ -107,9 +113,16 @@ while True:
         # Compute the action for this step by using the previously 
         # defined controller
         time_start = time.time()
-       
+
+        # Test battery
+        # see test_battery.py
+        triggers = tb.tests(state, prediction_depth)
+        # state machine based on triggers of test battery
+        # see state_machine.py
+        state_machine_action = sm.act(triggers) # State machine picks action
+
         for a in range(number_of_agents):
-            state_machine_action = act(prediction_depth, state[a])  # State machine picks action
+            #state_machine_action = act(prediction_depth, state[a])  # State machine picks action
             railenv_action = observation_builder.choose_railenv_action(a, state_machine_action)
             # state_machine_action_dict.update({a: state_machine_action})
             railenv_action_dict.update({a: railenv_action})
@@ -139,7 +152,7 @@ while True:
             # of this loop, and move onto the next Env evaluation
             all_done = True
             break
-    
+
     T_rewards.append(reward_sum)
     # Compute num of agents that reached their target  
     for a in range(number_of_agents):
