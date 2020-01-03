@@ -14,7 +14,7 @@ class stateMachine():
 	def __init__(self):
 		print("Init")
 
-	def act(self, triggers):
+	def act(self, triggers1):
 		"""
 		:param prediction_depth:
 		:param state: observation of one agent
@@ -22,9 +22,14 @@ class stateMachine():
 		"""
 
 		#decision_dict = {0:1, 1:1, 2:1, 3:1}
+
+		triggers = triggers1["main"]
+
 		decision_dict = {}
 		for i in range(len(triggers)):
 			decision_dict[i] = 1
+
+
 
 		for a in triggers:
 			local_decision_vector = np.zeros(len(triggers))
@@ -51,5 +56,10 @@ class stateMachine():
 							decision = 0
 				local_decision_vector[ca] = decision
 			decision_dict[a] = np.max(local_decision_vector)
+
+		triggers2 = triggers1["target"]
+		for a in triggers2:
+			if triggers2[a] == 1:
+				decision_dict[a] = 0
 
 		return decision_dict
