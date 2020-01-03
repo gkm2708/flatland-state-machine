@@ -19,8 +19,8 @@ prediction_depth = 20
 #####################################################################
 # Instantiate a Remote Client
 #####################################################################
+print('starting remote_client')
 remote_client = FlatlandRemoteClient()
-
 observation_builder = GraphObsForRailEnv(predictor=ShortestPathPredictorForRailEnv(max_depth=prediction_depth),bfs_depth=4)
 
 #####################################################################
@@ -60,7 +60,7 @@ while True:
         # and hence its safe to break out of the main evaluation loop
         break
     # print("######### Start new evaluation #########")
-    print("Evaluation Number : {}".format(evaluation_number))
+    print("Evaluation Number : {}".format(evaluation_number), 'env_creation_time =', env_creation_time, 'number_of_agents =', len(remote_client.env.agents), 'map height =', observation_builder.env.height, 'map width =', observation_builder.env.width)
 
     #####################################################################
     # Access to a local copy of the environment
@@ -134,12 +134,13 @@ while True:
         time_start = time.time()
         state, reward, done, info = remote_client.env_step(railenv_action_dict)
         steps += 1
-        #if steps % 10 == 0:
-        #    print("Step / Max Steps: {}/{}".format(steps, max_time_steps))
         time_taken = time.time() - time_start
         time_taken_per_step.append(time_taken)
-        
         reward_sum += sum(list(reward.values()))
+
+        if steps % 1 == 0:
+           print("Step / Max Steps: {}/{}".format(steps, max_time_steps), 'time_taken_by_controller', round(time_taken_by_controller[-1],3), 'time_taken_per_step', round(time_taken_per_step[-1],1), 'reward_step', round(sum(list(reward.values())),1), 'reward_sum', round(reward_sum))
+
         if steps > max_time_steps: # To avoid that all dones are set to 0 after reaching max_time_steps
             break
         if done['__all__']:
