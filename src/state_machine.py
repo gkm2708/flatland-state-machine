@@ -14,14 +14,51 @@ class stateMachine():
 	def __init__(self):
 		print("Init")
 
-	def act(self, triggers1):
+
+	def act(self, triggers):
+		#print("Test")
+		decision_dict = {}
+		for i in range(len(triggers)):
+			decision_dict[i] = 0
+
+
+		#decision = 0
+		for a in triggers:
+			local_decision_vector = np.zeros(len(triggers))
+			if len(triggers[a]["ca"]) > 0:
+
+				for ca in triggers[a]["ca"]:
+					decision = 1
+					if decision_dict[ca] == 1:
+						if triggers[a]["B_already_in_CZ"] == 1:
+							decision = 0
+						else:
+							if triggers[a]["A_entering_CZ"] == 1 and triggers[a]["B_entering_CZ"] == 1:
+								decision = random.randint(0, 1)
+							else:
+								decision = 0
+					local_decision_vector[a] = decision
+			else:
+				decision = 1
+				if triggers[a]["B_already_in_CZ"] == 1:
+					decision = 0
+				else:
+					if triggers[a]["A_entering_CZ"] == 1 and triggers[a]["B_entering_CZ"] == 1:
+						decision = random.randint(0, 1)
+					else:
+						decision = 0
+				local_decision_vector[a] = decision
+			decision_dict[a] = np.max(local_decision_vector)
+
+		return decision_dict
+
+
+	def act1(self, triggers1):
 		"""
 		:param prediction_depth:
 		:param state: observation of one agent
 		:return: 0 to follow shortest path, 1 to stop
 		"""
-
-		#decision_dict = {0:1, 1:1, 2:1, 3:1}
 
 		triggers = triggers1["main"]
 
