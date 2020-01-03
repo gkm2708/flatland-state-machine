@@ -14,7 +14,7 @@ from src.predictions import ShortestPathPredictorForRailEnv
 from src.state_machine import stateMachine
 from src.test_battery import TestBattery
 
-prediction_depth = 200
+prediction_depth = 20
 
 #####################################################################
 # Instantiate a Remote Client

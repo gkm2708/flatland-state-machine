@@ -8,6 +8,7 @@ The ObservationBuilder-derived custom classes implement 2 functions, reset() and
 multi-agent environments.
 
 """
+import random
 
 import collections
 from typing import Optional, List, Dict, Tuple
@@ -21,9 +22,13 @@ from flatland.envs.rail_env import RailEnvNextAction, RailEnvActions
 from flatland.core.grid.grid4_utils import get_new_position
 from flatland.core.grid.grid_utils import coordinate_to_position, distance_on_rail, position_to_coordinate
 from flatland.utils.ordered_set import OrderedSet
-
+from typing import Dict, List, Optional, NamedTuple, Tuple, Set
 
 from src.priority import assign_priority
+
+WalkingElement = \
+    NamedTuple('WalkingElement',
+               [('position', Tuple[int, int]), ('direction', int), ('next_action_element', RailEnvNextAction)])
 
 
 class GraphObsForRailEnv(ObservationBuilder):
@@ -80,8 +85,8 @@ class GraphObsForRailEnv(ObservationBuilder):
         for a in self.env.agents:
             if a.status == RailAgentStatus.ACTIVE:
                 self.num_active_agents += 1
-        self.prediction_dict = self.predictor.get()
 
+        self.prediction_dict = self.predictor.get()
         # Useful to check if occupancy is correctly computed
         self.cells_sequence = self.predictor.compute_cells_sequence(self.prediction_dict)
 
@@ -106,6 +111,8 @@ class GraphObsForRailEnv(ObservationBuilder):
                     pos_list.append(self.predicted_pos[ts][a])  # Use int positions
                 self.predicted_pos_list.update({a: pos_list})
 
+
+
         path = self.path()
         direction = self.absolute_dir_dict(path)
 
@@ -115,11 +122,15 @@ class GraphObsForRailEnv(ObservationBuilder):
 
         preprocessed_observation = {}
         for a in handles:
-            preprocessed_observation[a] = self.preprocess_satate(observations, a)
+            preprocessed_observation[a] = self.preprocess_state(observations, a)
 
         dict_temp = {}
         dict_temp["preprocessed_observation"] = preprocessed_observation
         dict_temp["cells_sequence"] = self.cells_sequence
+
+
+        #self.find_alternate(dict_temp)
+
 
         return dict_temp
 
@@ -140,9 +151,7 @@ class GraphObsForRailEnv(ObservationBuilder):
         agent = agents[handle]
 
         # Occupancy
-        occupancy, conflicting_agents = self._fill_occupancy(handle)
-
-        """
+        occupancy, conflicting_agents, overlapping_paths = self._fill_occupancy(handle, path)
 
         # Augment occupancy with another one-hot encoded layer:
         # 1 if this cell is overlapping and the conflict span was already entered by some other agent
@@ -162,6 +171,7 @@ class GraphObsForRailEnv(ObservationBuilder):
                     while i < self.max_prediction_depth:
                         second_layer[i] = 1 if occupancy[i] > 0 else 0
                         i += 1
+        """
 
         # Bifurcation points, one-hot encoded layer of predicted cells where 1 means that this cell is a fork
         # (globally - considering cell transitions not depending on agent orientation)
@@ -201,17 +211,39 @@ class GraphObsForRailEnv(ObservationBuilder):
 
         ret = {}
         ret["path"] = path
-        ret["overlap"] = self._compute_overlapping_paths(handle)
+        ret["overlap_new"] = self._compute_overlapping_paths1(handle, path)
+        ret["overlap_old"] = overlapping_paths
         ret["direction"] = direction
-        ret["bypass"] = self._bypass_dict(direction, path[handle], handle)
+        ret["occupancy_old"] = occupancy
+        #ret["bypass"] = self._bypass_dict(direction, path[handle], handle)
         ret["conflicting_agents"] = conflicting_agents
+        ret["conflict"] = second_layer
 
         # With this obs the agent actually decides only if it has to move or stop
         return ret
 
 
-    def preprocess_satate(self, state, handle):
+    def preprocess_state(self, state, handle):
 
+        ret = state[handle]
+        conflict_without_dir_all, path_conflict = self.preprocess_state_part(state, handle)
+
+        #ret = {}
+        #ret["conflicting_agents"] = state[handle]["conflicting_agents"]
+        #ret["path"] = state[handle]["path"]
+        #ret["overlap_old"] = state[handle]["overlap_old"]
+        #ret["overlap_new"] = state[handle]["overlap_new"]
+        #ret["direction"] = state[handle]["direction"]
+        #ret["bypass"] = state[handle]["bypass"]
+        #ret["occupancy_old"] = state[handle]["occupancy_old"]
+
+        ret["per_agent_occupancy_in_time"] = conflict_without_dir_all
+        ret["occupancy_new"] = [1 if item > 0 else 0 for item in path_conflict]
+
+        return ret
+
+
+    def preprocess_state_part(self, state, handle):
 
         # Single values
         conflict_all = np.zeros((len(self.env.agents), self.max_prediction_depth))
@@ -224,7 +256,7 @@ class GraphObsForRailEnv(ObservationBuilder):
             if j != handle:
 
                 # indices of surrounding agent j for overlap with main agent handle
-                indices = np.where(state[handle]["overlap"][j]==1)
+                indices = np.where(state[handle]["overlap_new"][j]==1)
 
                 # if there is a conflict
                 if len(indices[0]) != 0:
@@ -263,7 +295,7 @@ class GraphObsForRailEnv(ObservationBuilder):
 
                     # After this 2's indicate time conflict
                     conflict = np.sum(np.concatenate([np.expand_dims(time_overlap_vector, axis=0),
-                                                      np.expand_dims(state[handle]["overlap"][j],axis=0)],axis=0),axis=0)
+                                                      np.expand_dims(state[handle]["overlap_new"][j],axis=0)],axis=0),axis=0)
 
                     # find points where conflict is happening
                     conflicting_points = [ [int(y[0]), int(y[1])] if x > 1 else [0,0] for x, y in zip(conflict, state[handle]["path"][handle])]
@@ -281,16 +313,130 @@ class GraphObsForRailEnv(ObservationBuilder):
 
         path_conflict = np.sum(conflict_all, axis=0)
 
-        ret = {}
+        return conflict_without_dir_all, path_conflict
 
-        ret["conflicting_agents"] = state[handle]["conflicting_agents"]
-        ret["path"] = state[handle]["path"]
-        ret["per_agent_occupancy_in_time"] = conflict_without_dir_all
-        ret["occupancy_new"] = [1 if item > 0 else 0 for item in path_conflict]
 
-        return ret
 
-    #################################################################################################
+    ############################################# BYPASS EVALUATION ####################################################
+
+    def find_alternate(self, dict_temp):
+        # ############### Evaluate alternative paths #####################
+        # get per agent cost
+        cost_mat = self.evaluate_cost(dict_temp)
+        best_cost = np.sum(cost_mat)
+        print("Original Overall conflict cost is ", best_cost)
+
+        for i in range(0,20):
+            alt_dict = self.alternate_path(cost_mat, dict_temp)
+            alt_cost = self.evaluate_cost(alt_dict)
+            if best_cost > np.sum(alt_cost):
+                print("found better alternative")
+                break
+            else:
+                print("next check", cost_mat, alt_cost)
+
+
+    def alternate_path(self, cost_mat, dict_temp_temp):
+
+        dict_temp = dict_temp_temp
+        most_costly = random.randint(0,3)
+        agent = self.env.agents[most_costly]
+        speed = agent.speed_data["speed"]
+
+        repeat = 1
+        if float("{0:.2f}".format(speed)) == 1.0:
+            repeat = 1
+        if float("{0:.2f}".format(speed)) == 0.50:
+            repeat = 2
+        if float("{0:.2f}".format(speed)) == 0.33:
+            repeat = 3
+        if float("{0:.2f}".format(speed)) == 0.25:
+            repeat = 4
+
+        selected_bypass = random.randint(0,len(dict_temp["preprocessed_observation"][most_costly]["bypass"])-1)
+
+        retry_counter = 0
+        while True:
+            # check if the bypass is the same old path
+            retry_counter += 1
+
+            unique_a, idx = np.unique(dict_temp_temp["preprocessed_observation"][most_costly]["path"][most_costly], axis=0, return_index=True)
+            unique_a = unique_a[np.argsort(idx)]
+            where = np.where((unique_a == (0.0, 0.0)).all(axis=1))
+            unique_a = np.delete(unique_a, where, axis=0)
+
+            unique_b, idy = np.unique(dict_temp_temp["preprocessed_observation"][most_costly]["bypass"][selected_bypass], axis=0, return_index=True)
+            unique_b = unique_b[np.argsort(idy)]
+            where = np.where((unique_b == (0.0, 0.0)).all(axis=1))
+            unique_b = np.delete(unique_b, where, axis=0)
+
+            # find intersection
+            a = set((tuple(i) for i in unique_a))
+            b = set((tuple(i) for i in unique_b))
+            i_section = a.intersection(b)
+
+
+            if len(i_section) > 0 or retry_counter > 5:
+                break
+            else:
+                selected_bypass = random.randint(0,
+                                                 len(dict_temp["preprocessed_observation"][most_costly]["bypass"]) - 1)
+
+
+            #unique_a = np.unique(dict_temp_temp["preprocessed_observation"][most_costly]["path"][most_costly], axis=0)
+            #where = np.where((unique_a == (0.0, 0.0)).all(axis=1))
+            #unique_a = np.delete(unique_a, where, axis=0)
+            #unique_a = [str(int(item[0])) + "," + str(int(item[1])) for item in unique_a]
+
+            #unique_b = np.unique(dict_temp_temp["preprocessed_observation"][most_costly]["bypass"][selected_bypass], axis=0)
+
+            #if len(np.setdiff1d(unique_a, unique_b)) > 0 or retry_counter > 5:
+            #    break
+            #else:
+            #    selected_bypass = random.randint(0,
+            #                                     len(dict_temp["preprocessed_observation"][most_costly]["bypass"]) - 1)
+
+        local_path_bunch = dict_temp["preprocessed_observation"][most_costly]["path"]
+        #print(local_path_bunch[most_costly])
+        for i in range(0, len(dict_temp["preprocessed_observation"][most_costly]["bypass"][selected_bypass])-1):
+            temp_val = dict_temp["preprocessed_observation"][most_costly]["bypass"][selected_bypass][i].split(",")
+            local_path_bunch[most_costly][i*repeat:(i+1)*repeat] = [int(temp_val[0]), int(temp_val[1])]
+
+            if i == len(dict_temp["preprocessed_observation"][most_costly]["bypass"][selected_bypass])-1 and\
+                    i < 200:
+                local_path_bunch[most_costly][(i + 1) * repeat:200] = [0,0]
+        #print(local_path_bunch[most_costly])
+
+
+        for i in range(0, len(dict_temp["preprocessed_observation"])):
+            # change path
+            dict_temp["preprocessed_observation"][i]["path"] = local_path_bunch
+            # change overlap
+            dict_temp["preprocessed_observation"][i]["overlap"] = self._compute_overlapping_paths1(i, dict_temp["preprocessed_observation"][i]["path"])
+            # change direction : not needed for cost
+
+        # now compute occupancy
+        for i in range(0, len(dict_temp["preprocessed_observation"])):
+            a, b = self.preprocess_state_part(dict_temp["preprocessed_observation"], i)
+            dict_temp["preprocessed_observation"][i]["overlap"] = a
+            dict_temp["preprocessed_observation"][i]["occupancy_new"] = b
+
+        return dict_temp
+
+
+    def evaluate_cost(self, dict_temp):
+        temp = dict_temp["preprocessed_observation"]
+        cost_mat = np.zeros(len(dict_temp["preprocessed_observation"]))
+        for item in temp:
+            cost = 0
+            for item1 in temp[item]["per_agent_occupancy_in_time"]:
+                cost += np.sum(item1, axis=0)
+            cost_mat[item] = cost
+        return cost_mat
+
+    ####################################################################################################################
+    ############################################## BYPASSES CALCULATION ################################################
+    ####################################################################################################################
 
     def _bypass_dict(self, direction, path, handle):
 
@@ -301,6 +447,9 @@ class GraphObsForRailEnv(ObservationBuilder):
         # find only unique of them
         unique_a, idx = np.unique(path,axis=0, return_index=True)
         unique_a = unique_a[np.argsort(idx)][::-1]
+        where = np.where((unique_a == (0.0, 0.0)).all(axis=1))
+        unique_a = np.delete(unique_a, where, axis=0)
+
         #unique_a = unique_a[np.argsort(idx)]
 
         if len(unique_a) <= 2:
@@ -310,6 +459,7 @@ class GraphObsForRailEnv(ObservationBuilder):
 
         visited_nodes = set()  # set
         bfs_queue = []
+
         initial = str(int(unique_a[0][0]))+","+str(int(unique_a[0][1]))
         adjacent = str(int(unique_a[1][0]))+","+str(int(unique_a[1][1]))
 
@@ -334,39 +484,43 @@ class GraphObsForRailEnv(ObservationBuilder):
                 a1 = self.env.distance_map.distance_map[handle][int(node[0])][int(node[1])]
                 a2 = np.min(a1)
                 a3 = np.asarray([1 if item == a2 else 0 for item in a1])
-                a4 = np.count_nonzero(a3)
                 a5 = np.where(a3==1)
 
                 for i in a5:
                     for j in i:
+                        found = False
                         if j == 0:
                             a22 = np.min(self.env.distance_map.distance_map[handle][int(node[0])+1][int(node[1])])
                             if a22 -1 == a2:
                                 adjacent = str(int(node[0])+1)+","+str(int(node[1]))
+                                found = True
                         if j == 1:
                             a22 = np.min(self.env.distance_map.distance_map[handle][int(node[0])][int(node[1])-1])
                             if a22 -1 == a2:
                                 adjacent = str(int(node[0]))+","+str(int(node[1])-1)
+                                found = True
                         if j == 2:
                             a22 = np.min(self.env.distance_map.distance_map[handle][int(node[0])-1][int(node[1])])
                             if a22 -1 == a2:
                                 adjacent = str(int(node[0])-1)+","+str(int(node[1]))
+                                found = True
                         if j == 3:
                             a22 = np.min(self.env.distance_map.distance_map[handle][int(node[0])][int(node[1])+1])
                             if a22 -1 == a2:
                                 adjacent = str(int(node[0]))+","+str(int(node[1])+1)
+                                found = True
 
                         if not adjacent in visited_nodes:
                             # For now I'm using as key the agent_position tuple
                             obs_graph[agent_position].append(adjacent)
                             visited_nodes.add((adjacent))
                             tmp_queue.append(adjacent)
-                        elif len(obs_graph[agent_position]) == 0:
+                        elif adjacent in visited_nodes and len(obs_graph[agent_position]) == 0 and found:
                             obs_graph[agent_position].append(adjacent)
-                        else:
-                            for item in obs_graph[agent_position]:
-                                if item != adjacent:
-                                    obs_graph[agent_position].append(adjacent)
+                        #else:
+                        #    for item in obs_graph[agent_position]:
+                        #        if item != adjacent:
+                        #            obs_graph[agent_position].append(adjacent)
             # Add all the nodes of the next level to the BFS queue
             for el in tmp_queue:
                 bfs_queue.append(el)
@@ -382,10 +536,10 @@ class GraphObsForRailEnv(ObservationBuilder):
 
         # initial is target and target is initial now.
         # Inversion as the map starts from goal to start and traversal from goal to start
-        stack = self.find_all_paths(obs_graph, initial, target)
+        #stack = self.find_all_paths(obs_graph, target, initial)
+        stack = self.find_all_paths(dict, target, initial)
 
         return stack
-
 
     def find_all_paths(self, graph, start, end, path=[]):
         path = path + [start]
@@ -401,8 +555,9 @@ class GraphObsForRailEnv(ObservationBuilder):
                     paths.append(newpath)
         return paths
 
-    #################################################################################################
+    ####################################################################################################################
 
+    # paths with zeros substituted at the end
     def path(self):
         path = np.zeros((len(self.predicted_pos_coord[0])
                          ,len(self.predicted_pos_coord)
@@ -444,73 +599,57 @@ class GraphObsForRailEnv(ObservationBuilder):
         return path
 
 
-    def _build_path(self):
-        path = np.zeros((len(self.predicted_pos_coord[0])
-                         ,len(self.predicted_pos_coord)
-                         ,self.predicted_pos_coord[0][0].shape[0]))
+    def _compute_overlapping_paths1(self,handle, state):
 
-        for index in range(0,len(self.predicted_pos_coord[0])):
-            repetition = 0
-            first = self.predicted_pos_coord[0][index]
-            run_index = 0
+        occ = np.zeros( (len(state), len(state[0])) , dtype=np.int8)
 
-            while True:
-                #print(index, run_index)
-                if first[0] == self.predicted_pos_coord[run_index][index][0] and first[1] == self.predicted_pos_coord[run_index][index][1]:
-                    run_index += 1
-                    if run_index == 4:
-                        break
-                else:
-                    repetition = run_index
-                    break
 
-            temp = np.zeros((len(self.predicted_pos_coord),2))
+        for j in range(0, len(state)):
+            if j != handle:
+                # you have two arrays
+                # find unique and sort them
+                unique_a, idx = np.unique(state[handle],axis=0, return_index=True)
+                unique_a = unique_a[np.argsort(idx)]
+                where = np.where((unique_a==(0.0, 0.0)).all(axis=1))
+                unique_a = np.delete(unique_a, where, axis=0)
 
-            for item in self.predicted_pos_coord.keys():
-                #print(item)
-                temp[int(item)] = self.predicted_pos_coord[item][index]
+                unique_b, idy = np.unique(state[j],axis=0, return_index=True)
+                unique_b = unique_b[np.argsort(idy)]
+                where = np.where((unique_b==(0.0, 0.0)).all(axis=1))
+                unique_b = np.delete(unique_b, where, axis=0)
 
-            unique_a = np.unique(temp,axis=0)
-            unique_count = len(unique_a)
+                # find intersection
+                a = set((tuple(i) for i in unique_a))
+                b = set((tuple(i) for i in unique_b))
+                i_section = a.intersection(b)
 
-            for index1 in range(0,unique_count*repetition):
-                path[index][index1][0] = self.predicted_pos_coord[index1][index][0]
-                path[index][index1][1] = self.predicted_pos_coord[index1][index][1]
-        return path
+                masked_b = np.sum([[1 if x[0] == item[0] and x[1] == item[1] else 0 for x in state[handle]] for item in i_section ], axis=0)
 
-    def _build_path_1(self):
-        path = np.zeros((len(self.predicted_pos_coord[0])
-                         ,len(self.predicted_pos_coord)
-                         ,self.predicted_pos_coord[0][0].shape[0]))
+                occ[j] = masked_b
+        return occ
 
-        for index in range(0,len(self.predicted_pos_coord[0])):
-            repetition = 0
-            first = self.predicted_pos_coord[0][index]
-            run_index = 0
 
-            while True:
-                #print(index, run_index)
-                if first[0] == self.predicted_pos_coord[run_index][index][0] and first[1] == self.predicted_pos_coord[run_index][index][1]:
-                    run_index += 1
-                    if run_index == 4:
-                        break
-                else:
-                    repetition = run_index
-                    break
+    # More than overlapping paths, this function computes cells in common in the predictions
+    def _compute_overlapping_paths(self, handle):
+        """
+        Function that checks overlapping paths, where paths take into account shortest path prediction, so time/speed,
+        but not the fact that the agent is moving or not.
+        :param handle: agent id
+        :return: overlapping_paths is a np.array that computes path overlapping for pairs of agents, where 1 means overlapping.
+        Each layer represents overlapping with one particular agent.
+        """
+        overlapping_paths = np.zeros((self.env.get_num_agents(), self.max_prediction_depth), dtype=int)
+        cells_sequence = self.predicted_pos_list[handle]
 
-            temp = np.zeros((len(self.predicted_pos_coord),2))
-
-            for item in self.predicted_pos_coord.keys():
-                #print(item)
-                temp[int(item)] = self.predicted_pos_coord[item][index]
-
-            unique_a = np.unique(temp,axis=0)
-            unique_count = len(unique_a)
-
-            for index1 in range(0,unique_count*repetition):
-                path[index][index1][0] = self.predicted_pos_coord[index1][index][0]
-                path[index][index1][1] = self.predicted_pos_coord[index1][index][1]
-        return path
+        for a in range(len(self.env.agents)):
+            if a != handle:
+                i = 0
+                other_agent_cells_sequence = self.predicted_pos_list[a]
+                for pos in cells_sequence:
+                    if pos in other_agent_cells_sequence:
+                        overlapping_paths[a, i] = 1
+                    i += 1
+        return overlapping_paths
 
 
     def absolute_dir_dict(self, state):
@@ -526,7 +665,7 @@ class GraphObsForRailEnv(ObservationBuilder):
 
     #################################################################################################
 
-    def _fill_occupancy(self, handle):
+    def _fill_occupancy(self, handle, path):
         """
         Returns encoding of agent occupancy as an array where each element is
         0: no other agent in this cell at this ts (free cell)
@@ -536,7 +675,8 @@ class GraphObsForRailEnv(ObservationBuilder):
         """
         occupancy = np.zeros(self.max_prediction_depth, dtype=int)
         conflicting_agents = set()
-        overlapping_paths = self._compute_overlapping_paths(handle)
+        #overlapping_paths = self._compute_overlapping_paths(handle)
+        overlapping_paths = self._compute_overlapping_paths1(handle, path)
 
         # cells_sequence = self.cells_sequence[handle]
         # span_cells = []
@@ -557,7 +697,7 @@ class GraphObsForRailEnv(ObservationBuilder):
 
         # the calculated occupancy is for the agents that have conflict and hence conflict occupancy
 
-        return occupancy, conflicting_agents
+        return occupancy, conflicting_agents, overlapping_paths
 
 
     def _possible_conflict(self, handle, ts):
@@ -622,16 +762,14 @@ class GraphObsForRailEnv(ObservationBuilder):
         """
         return int((direction + 2) % 4)
 
-
+    """
     # More than overlapping paths, this function computes cells in common in the predictions
     def _compute_overlapping_paths(self, handle):
-        """
-        Function that checks overlapping paths, where paths take into account shortest path prediction, so time/speed, 
-        but not the fact that the agent is moving or not.
-        :param handle: agent id
-        :return: overlapping_paths is a np.array that computes path overlapping for pairs of agents, where 1 means overlapping.
-        Each layer represents overlapping with one particular agent.
-        """
+        #Function that checks overlapping paths, where paths take into account shortest path prediction, so time/speed, 
+        #but not the fact that the agent is moving or not.
+        #:param handle: agent id
+        #:return: overlapping_paths is a np.array that computes path overlapping for pairs of agents, where 1 means overlapping.
+        #Each layer represents overlapping with one particular agent.
         overlapping_paths = np.zeros((self.env.get_num_agents(), self.max_prediction_depth), dtype=int)
         cells_sequence = self.predicted_pos_list[handle]
 
@@ -644,7 +782,7 @@ class GraphObsForRailEnv(ObservationBuilder):
                         overlapping_paths[a, i] = 1
                     i += 1
         return overlapping_paths
-
+    """
 
     def _find_forks(self):
         """
@@ -756,3 +894,5 @@ class GraphObsForRailEnv(ObservationBuilder):
             action = RailEnvActions.DO_NOTHING
 
         return action
+
+    #################################################################################################

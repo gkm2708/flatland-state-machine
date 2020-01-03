@@ -80,8 +80,15 @@ class TestBattery():
 
     # Test 1 and 2 : Check if agent is entering conflict zone with another agent
     def entering_cz(self, a, b, observations):
+        return 1 if observations[a]["per_agent_occupancy_in_time"][b][0] > 0 else 0
+        #return 1 if observations[a]["conflict"][0] > 0 else 0
+
+    """
+    def entering_cz(self, a, b, observations):
         return 0 if observations[a]["path"][a][0][0] == 0 and observations[a]["path"][a][0][1] == 0 else \
-            1 if observations[a]["per_agent_occupancy_in_time"][b][0] > 0 else 0
+            1 if observations[a]["occupancy_new"][0] > 0 else 0
+    """
+
 
     def check_target(self,a, observations):
         return 1 if observations[a]["path"][a][0][0] == 0 and observations[a]["path"][a][0][1] == 0 else 0
@@ -121,11 +128,11 @@ class TestBattery():
             if len(ts) > 0:
                 i = ts[0] # Since the previous returns a list of ts
                 while 0 <= i < self.max_prediction_depth:
-                    second_layer[i] = 1 if observations[b]["occupancy_new"][i] > 0 else 0
+                    second_layer[i] = 1 if observations[b]["occupancy_old"][i] > 0 else 0
                     i -= 1
                 i = ts[0]
                 while i < self.max_prediction_depth:
-                    second_layer[i] = 1 if observations[b]["occupancy_new"][i] > 0 else 0
+                    second_layer[i] = 1 if observations[b]["occupancy_old"][i] > 0 else 0
                     i += 1
 
         return int(second_layer[0])

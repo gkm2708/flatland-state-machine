@@ -36,6 +36,7 @@ class stateMachine():
 			for ca in triggers[a]:
 				decision = 1
 				if decision_dict[ca] == 1:
+
 					if triggers[a][ca]["A_entering_CZ"] == 0 or  triggers[a][ca]["A_already_in_CZ"] == 1:
 						decision = 0
 					elif triggers[a][ca]["A_entering_CZ"] == 1:

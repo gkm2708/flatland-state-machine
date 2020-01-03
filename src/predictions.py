@@ -76,6 +76,12 @@ class ShortestPathPredictorForRailEnv(PredictionBuilder):
 
         shortest_paths = get_shortest_paths(distance_map, max_depth=self.max_depth)
         self.shortest_paths = shortest_paths
+
+        return self.get_middle(agents, shortest_paths)
+
+
+    def get_middle(self, agents, shortest_paths):
+
         prediction_dict = {}
         for agent in agents:
 
