@@ -48,7 +48,7 @@ class TestBattery():
                 # if first bit of per_agent_occupancy_in_time for agent is greater than 0
                 #
                 final2["A_entering_CZ"] = self.entering_cz(a, ca, observations)
-                final2["B_entering_CZ"] = self.entering_cz(a, ca, observations)
+                final2["B_entering_CZ"] = self.entering_cz(ca, a, observations)
                 #
                 # is the current agent in the CZ (per other conflict agent)?
                 #
@@ -128,11 +128,11 @@ class TestBattery():
             if len(ts) > 0:
                 i = ts[0] # Since the previous returns a list of ts
                 while 0 <= i < self.max_prediction_depth:
-                    second_layer[i] = 1 if observations[b]["occupancy_old"][i] > 0 else 0
+                    second_layer[i] = 1 if observations[b]["per_agent_occupancy_in_time"][a][i] > 0 else 0
                     i -= 1
                 i = ts[0]
                 while i < self.max_prediction_depth:
-                    second_layer[i] = 1 if observations[b]["occupancy_old"][i] > 0 else 0
+                    second_layer[i] = 1 if observations[b]["per_agent_occupancy_in_time"][a][i] > 0 else 0
                     i += 1
 
         return int(second_layer[0])

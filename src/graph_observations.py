@@ -574,6 +574,7 @@ class GraphObsForRailEnv(ObservationBuilder):
                 if first[0] == self.predicted_pos_coord[run_index][index][0] and first[1] == self.predicted_pos_coord[run_index][index][1]:
                     run_index += 1
                     if run_index == 4:
+                        repetition = run_index
                         break
                 else:
                     repetition = run_index
