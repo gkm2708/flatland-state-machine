@@ -1,4 +1,3 @@
-import numpy as np
 import time
 import sys
 import numpy as np
@@ -60,7 +59,8 @@ while True:
         # and hence its safe to break out of the main evaluation loop
         break
     # print("######### Start new evaluation #########")
-    print("Evaluation Number : {}".format(evaluation_number), 'env_creation_time =', env_creation_time, 'number_of_agents =', len(remote_client.env.agents), 'map height =', observation_builder.env.height, 'map width =', observation_builder.env.width)
+    print('remote_client.current_env_path =', remote_client.current_env_path)
+    print("Evaluation Number : {}".format(evaluation_number), '\tenv_creation_time =', round(env_creation_time), '\tnumber_of_agents =', len(remote_client.env.agents), '\tmap height/width =', observation_builder.env.height, '/', observation_builder.env.width)
 
     #####################################################################
     # Access to a local copy of the environment
