@@ -9,8 +9,9 @@ import numpy as np
 #from tqdm import trange
 #from knockknock import telegram_sender
 #from pathlib import Path
+import time
 
-base_dir = "/home/gaurav/flatland-state-machine"
+base_dir = "/home/giulia/git/flatland-state-machine"
 sys.path.append(base_dir)
 
 from flatland.envs.rail_env import RailEnv
@@ -33,15 +34,7 @@ def log(s):
 
 
 def main(args, dir):
-	'''
-	
-	:param args: 
-	:return: 
-	Episodes to debug (set breakpoint in episodes loop to debug):
-	- ep = 3, agent 1 spawns in front of 3, blocking its path; 0 and 2 are in a deadlock since they have same priority
-	- ep = 4, agents stop because of wrong priorities even though the conflict zone wasn't entered,
-	- ep = 14, 
-	'''
+
 	rail_generator = sparse_rail_generator(max_num_cities=args.max_num_cities,
 	                                       seed=args.seed,
 	                                       grid_mode=args.grid_mode,
@@ -70,11 +63,11 @@ def main(args, dir):
 		              'min_duration': args.min_duration,  # Minimal duration of malfunction
 		              'max_duration': args.max_duration  # Max duration of malfunction
 	              }))
-
-	env_renderer = RenderTool(
-		env,
-		agent_render_variant=AgentRenderVariant.AGENT_SHOWS_OPTIONS_AND_BOX,
-		show_debug=True)
+	if args.render:
+		env_renderer = RenderTool(
+			env,
+			agent_render_variant=AgentRenderVariant.AGENT_SHOWS_OPTIONS_AND_BOX,
+			show_debug=True)
 
 	sm = stateMachine()
 	tb = TestBattery(env)
@@ -87,6 +80,7 @@ def main(args, dir):
 	T_Qs = []  # List of q values
 	T_num_done_agents = []  # List of number of done agents for each episode
 	T_all_done = []  # If all agents completed in each episode
+	T_episodes = [] # Time taken for each episode
 
 	if args.save_image and not os.path.isdir("image_dump"):
 		os.makedirs("image_dump")
@@ -94,9 +88,11 @@ def main(args, dir):
 	step_taken = 0
 	total_step_taken = 0
 	total_episodes = 0
+	step_times = [] # Time taken for each step
 
 	for ep in range(args.num_episodes):
 		# Reset info at the beginning of an episode
+		start_time = time.time()  # Take time of one episode
 
 		if args.generate_baseline:
 			if not os.path.isdir("image_dump/"+str(dir)) and args.save_image:
@@ -106,12 +102,14 @@ def main(args, dir):
 				os.makedirs("image_dump/"+str(ep))
 
 		state, info = env.reset()
-		env_renderer.reset()
+		if args.render:
+			env_renderer.reset()
 		reward_sum, all_done = 0, False  # reward_sum contains the cumulative reward obtained as sum during the steps
 		num_done_agents = 0
 
 		for step in range(max_time_steps):
-
+			
+			start_step_time = time.time()
 			#if step % 10 == 0:
 			#	print(step)
 
@@ -123,17 +121,19 @@ def main(args, dir):
 			state_machine_action = sm.act(triggers) # State machine picks action
 
 			for a in range(env.get_num_agents()):
-				railenv_action = observation_builder.choose_railenv_action(a, state_machine_action[a])
-				state_machine_action_dict.update({a: state_machine_action})
-				railenv_action_dict.update({a: railenv_action})
+				if info['action_required'][a]:
+					railenv_action = observation_builder.choose_railenv_action(a, state_machine_action[a])
+					state_machine_action_dict.update({a: state_machine_action})
+					railenv_action_dict.update({a: railenv_action})
 
 			state, reward, done, info = env.step(railenv_action_dict)  # Env step
-
-			if args.generate_baseline:
-				#env_renderer.render_env(show=True, show_observations=False, show_predictions=True)
-				env_renderer.render_env(show=False, show_observations=False, show_predictions=True)
-			else:
-				env_renderer.render_env(show=True, show_observations=False, show_predictions=True)
+			
+			if args.render:
+				if args.generate_baseline:
+					#env_renderer.render_env(show=True, show_observations=False, show_predictions=True)
+					env_renderer.render_env(show=False, show_observations=False, show_predictions=True)
+				else:
+					env_renderer.render_env(show=True, show_observations=False, show_predictions=True)
 
 			if args.generate_baseline:
 				if args.save_image:
@@ -171,13 +171,22 @@ def main(args, dir):
 			reward_sum += sum(reward[a] for a in range(env.get_num_agents()))
 
 			step_taken = step
+			time_taken_step = time.time() - start_step_time
+			step_times.append(time_taken_step)
+
 
 			if done['__all__']:
 				all_done = True
 				break
-
+		
+		time_taken = time.time() - start_time # Time taken for one episode
+		
 		total_step_taken += step_taken
 		total_episodes = ep
+
+		# Time metrics - too precise
+		avg_time_step = sum(step_times)/step_taken
+		#print("Avg time step: " + str(avg_time_step))
 
 		# No need to close the renderer since env parameter sizes stay the same
 		T_rewards.append(reward_sum)
@@ -189,21 +198,27 @@ def main(args, dir):
 		log("\nDone agents in episode: {}".format(percentage_done_agents))
 		T_num_done_agents.append(percentage_done_agents)  # In proportion to total
 		T_all_done.append(all_done)
+		T_episodes.append(time_taken)
+		
+		
 		
 	# Average number of agents that reached their target
 	avg_done_agents = sum(T_num_done_agents) / len(T_num_done_agents)  if len(T_num_done_agents) > 0 else 0
 	avg_reward = sum(T_rewards) / len(T_rewards) if len(T_rewards) > 0 else 0
 	avg_norm_reward = avg_reward / (max_time_steps / env.get_num_agents())
-
+	
+	avg_ep_time = sum(T_episodes) / args.num_episodes
+	
 	if total_episodes == 0:
 		total_episodes = 1
 
 	log("\nSeed: " + str(args.seed) \
-			+ "\tAvg_done_agents: " + str(avg_done_agents)\
-			+ "\tAvg_reward: " + str(avg_reward)\
-			+ "\tAvg_norm_reward: " + str(avg_norm_reward)\
-			+ "\tMax_time_steps: " + str(max_time_steps)\
-			+ "\tAvg_time_steps: " + str(total_step_taken/total_episodes))
+			+ "\t | Avg_done_agents: " + str(avg_done_agents)\
+			+ "\t | Avg_reward: " + str(avg_reward)\
+			+ "\t | Avg_norm_reward: " + str(avg_norm_reward)\
+			+ "\t | Max_num_time_steps: " + str(max_time_steps)\
+			+ "\t | Avg_num_time_steps: " + str(total_step_taken/total_episodes)
+	        + "\t | Avg episode time: " + str(avg_ep_time))
 
 	
 if __name__ == '__main__':
@@ -232,10 +247,11 @@ if __name__ == '__main__':
 	parser.add_argument('--generate-seeds', type=str, default='', help='--generate-seeds 6,12,13,14')
 	parser.add_argument('--generate-baseline', type=bool, default=False, help='--generate-baseline True/False')
 	parser.add_argument('--save-image', type=int, default=1, help='Save image')
+	parser.add_argument('--render', action='store_true', help="Render environments with RenderTool")
 
 	args = parser.parse_args()
 
-	if len(args.generate_seeds) > 0:
+	if len(args.generate_seeds) > 0: # This is to try specific seeds on a single episode
 		parser.set_defaults(num_episodes=1)
 		for i in args.generate_baseline.split(','):
 			i = int(i)

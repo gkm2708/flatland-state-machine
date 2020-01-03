@@ -11,6 +11,7 @@ multi-agent environments.
 import random
 
 import collections
+import itertools
 from typing import Optional, List, Dict, Tuple
 import numpy as np
 from collections import defaultdict
@@ -56,6 +57,8 @@ class GraphObsForRailEnv(ObservationBuilder):
         self.num_active_agents = 0
         self.cells_sequence = None
         self.forks_coords = None
+        
+        self.conflicting_agents = {} # Dict handle : set of predicted conflicting agents
 
 
     def set_env(self, env: Environment):
@@ -110,16 +113,18 @@ class GraphObsForRailEnv(ObservationBuilder):
                 for ts in range(self.max_prediction_depth):
                     pos_list.append(self.predicted_pos[ts][a])  # Use int positions
                 self.predicted_pos_list.update({a: pos_list})
-
-
-
-        path = self.path()
-        direction = self.absolute_dir_dict(path)
-
+        # Init
+        for a in handles:
+            self.conflicting_agents[a] = set()
+        
+        # Compute conflicting agents for all handles at once, saved in self.conflicting_agents
+        self.conflicting_agents = self._predicted_conflicts()
+        
         observations = {}
         for a in handles:
-            observations[a] = self.get(path, direction, a)
-
+            observations[a] = self.get(a)
+        
+        # Preprocess observation
         preprocessed_observation = {}
         for a in handles:
             preprocessed_observation[a] = self.preprocess_state(observations, a)
@@ -135,8 +140,7 @@ class GraphObsForRailEnv(ObservationBuilder):
         return dict_temp
 
 
-    # TODO Optimize considering that I don't need obs for those agents who don't have to pick actions
-    def get(self, path, direction, handle: int = 0) -> {}:
+    def get(self, handle: int = 0) -> {}:
         """
         Returns obs for one agent, obs are a single array of concatenated values representing:
         - occupancy of next prediction_depth cells,
@@ -151,10 +155,12 @@ class GraphObsForRailEnv(ObservationBuilder):
         agent = agents[handle]
 
         # Occupancy
-        occupancy, conflicting_agents, overlapping_paths = self._fill_occupancy(handle, path)
+        #occupancy, conflicting_agents = self._fill_occupancy(handle)
+        #conflicting_agents = self._fill_occupancy(handle)
 
         # Augment occupancy with another one-hot encoded layer:
         # 1 if this cell is overlapping and the conflict span was already entered by some other agent
+        '''
         second_layer = np.zeros(self.max_prediction_depth, dtype=int) # Same size as occupancy
         for ca in conflicting_agents:
             if ca != handle:
@@ -171,10 +177,10 @@ class GraphObsForRailEnv(ObservationBuilder):
                     while i < self.max_prediction_depth:
                         second_layer[i] = 1 if occupancy[i] > 0 else 0
                         i += 1
-        """
-
+        '''
         # Bifurcation points, one-hot encoded layer of predicted cells where 1 means that this cell is a fork
         # (globally - considering cell transitions not depending on agent orientation)
+        '''
         forks = np.zeros(self.max_prediction_depth, dtype=int)
         # Target
         target = np.zeros(self.max_prediction_depth, dtype=int)
@@ -197,6 +203,7 @@ class GraphObsForRailEnv(ObservationBuilder):
         # Malfunctioning obs
         # Counting number of agents that are currently malfunctioning (globally) - experimental
         n_agents_malfunctioning = 0  # in TreeObs they store the length of the longest malfunction encountered
+
         for a in agents:
             if a.malfunction_data['malfunction'] != 0:
                 n_agents_malfunctioning += 1  # Considering ALL agents
@@ -206,18 +213,31 @@ class GraphObsForRailEnv(ObservationBuilder):
         for a in agents:
             if a.status in [RailAgentStatus.READY_TO_DEPART]:
                 n_agents_ready_to_depart += 1  # Considering ALL agents
+        '''
 
         """
 
         ret = {}
+        path = np.zeros((len(self.predicted_pos_coord[0]), len(self.predicted_pos_coord),self.predicted_pos_coord[0][0].shape[0]))
+
+        for index in range(0,len(self.predicted_pos_coord[0])):
+            for index1 in range(0,len(self.predicted_pos_coord)):
+                path[index][index1][0] = self.predicted_pos_coord[index1][index][0]
+                path[index][index1][1] = self.predicted_pos_coord[index1][index][1]
+
+
         ret["path"] = path
         ret["overlap_new"] = self._compute_overlapping_paths1(handle, path)
         ret["overlap_old"] = overlapping_paths
         ret["direction"] = direction
-        ret["occupancy_old"] = occupancy
-        #ret["bypass"] = self._bypass_dict(direction, path[handle], handle)
-        ret["conflicting_agents"] = conflicting_agents
-        ret["conflict"] = second_layer
+
+        #ret["bypass"] = self._bypass_dict_1(direction, path[handle], handle)
+
+        #print(ret["bypass"])
+
+        ret["conflicting_agents"] = self.conflicting_agents[handle]
+        #ret["forks"] = forks
+        #ret["target"] = target
 
         # With this obs the agent actually decides only if it has to move or stop
         return ret
@@ -244,6 +264,129 @@ class GraphObsForRailEnv(ObservationBuilder):
 
 
     def preprocess_state_part(self, state, handle):
+
+                        dict[str(i)+","+str(j)] = np.min(self.env.distance_map.distance_map[handle][i][j])
+
+
+        unique_a = unique_a[::-1]
+        #print("Reverse Sequence",unique_a)
+
+        dict1 = {}
+        for item in unique_a:
+
+            #check all the surrounding points and push the one that is lower with its distance
+            #print("next node")
+            for i in range(int(item[0])-1, int(item[0])+2):
+                for j in range(int(item[1])-1, int(item[1])+2):
+
+                    if np.min(self.env.distance_map.distance_map[handle][i][j]) == np.min(self.env.distance_map.distance_map[handle][int(item[0])][int(item[1])])+1:
+                        #print(i,j,np.min(self.env.distance_map.distance_map[handle][i][j]))
+
+                        dict1[str(i)+","+str(j)] = np.min(self.env.distance_map.distance_map[handle][i][j])
+
+        dict_main = {}
+        for item in unique_a:
+
+            #check all the surrounding points and push the one that is lower with its distance
+            #print("next node")
+            #print(i,j, " for ", int(item[0]), int(item[1]) )
+
+
+            # find minimum of center point
+            # find count of minimum value (repetition is bifurcation)
+            # find position of minimum value
+            # if position is
+            # 0 - south
+            # 1 - west
+            # 2 - north
+            # 3 - east
+
+            # add to dictionary in the same way together with parent
+            #
+
+            a1 = self.env.distance_map.distance_map[handle][int(item[0])][int(item[1])]
+            print(a1)
+            a2 = np.min(a1)
+            print(a2)
+            a3 = np.asarray([1 if item == a2 else 0 for item in a1])
+            print(a3)
+            a4 = np.count_nonzero(a3)
+            print(a4)
+            a5 = np.where(a3==1)
+            print(a5)
+
+
+            dict = {}
+            for i in a5:
+                for j in i:
+                    if j == 0:
+                        print("check south")
+                        if np.min(self.env.distance_map.distance_map[handle][int(item[0])+1][int(item[1])]) - 1 == a2:
+                            dict[str(int(item[0]))+","+str(int(item[1]+1))] = np.min(self.env.distance_map.distance_map[handle][int(item[0])+1][int(item[1])])
+                    if j == 1:
+                        print("check west")
+                        if np.min(self.env.distance_map.distance_map[handle][int(item[0])][int(item[1])-1]) - 1 == a2:
+                            dict[str(int(item[0])-1)+","+str(int(item[1]))] = np.min(self.env.distance_map.distance_map[handle][int(item[0])][int(item[1])-1])
+                    if j == 2:
+                        print("check north")
+                        if np.min(self.env.distance_map.distance_map[handle][int(item[0])-1][int(item[1])]) - 1 == a2:
+                            dict[str(int(item[0]))+","+str(int(item[1])-1)] = np.min(self.env.distance_map.distance_map[handle][int(item[0])-1][int(item[1])])
+                    if j == 3:
+                        print("check east")
+                        if np.min(self.env.distance_map.distance_map[handle][int(item[0])][int(item[1])+1]) - 1 == a2:
+                            dict[str(int(item[0])+1)+","+str(int(item[1]))] = np.min(self.env.distance_map.distance_map[handle][int(item[0])][int(item[1])+1])
+
+            dict_main[str(int(item[0]))+","+str(int(item[1]))] = dict
+
+
+
+
+
+
+        print(dict,"\n", dict1)
+
+            # take first point and push in a dictionary
+
+
+
+            #print(item, item[0], item[1])
+            #print(self.env.distance_map.distance_map[handle][int(item[0])][int(item[1])])
+            #print(np.min(self.env.distance_map.distance_map[handle][int(item[0])][int(item[1])]))
+
+            # find values in adjacent cells
+            #print("\n\n",item)
+            #print(self.env.distance_map.distance_map[handle][int(item[0])-1][int(item[1]-1)])
+            #print(self.env.distance_map.distance_map[handle][int(item[0])][int(item[1])-1])
+            #print(self.env.distance_map.distance_map[handle][int(item[0])+1][int(item[1])-1])
+            #print(self.env.distance_map.distance_map[handle][int(item[0])-1][int(item[1])])
+            #print(self.env.distance_map.distance_map[handle][int(item[0])][int(item[1])])
+            #print(self.env.distance_map.distance_map[handle][int(item[0])+1][int(item[1])])
+            #print(self.env.distance_map.distance_map[handle][int(item[0])-1][int(item[1])+1])
+            #print(self.env.distance_map.distance_map[handle][int(item[0])][int(item[1])+1])
+            #print(self.env.distance_map.distance_map[handle][int(item[0])+1][int(item[1])+1])
+
+            #print(np.min(self.env.distance_map.distance_map[handle][int(item[0])-1][int(item[1]-1)]))
+            #print(np.min(self.env.distance_map.distance_map[handle][int(item[0])][int(item[1])+1]))
+            #print(np.min(self.env.distance_map.distance_map[handle][int(item[0])+1][int(item[1])]))
+            #print(np.min(self.env.distance_map.distance_map[handle][int(item[0])-1][int(item[1])-1]))
+            #print(np.min(self.env.distance_map.distance_map[handle][int(item[0])+1][int(item[1])+1]))
+            #print(np.min(self.env.distance_map.distance_map[handle][int(item[0])-1][int(item[1])]))
+            #print(np.min(self.env.distance_map.distance_map[handle][int(item[0])][int(item[1])-1]))
+            #print(np.min(self.env.distance_map.distance_map[handle][int(item[0])+1][int(item[1])+1]))
+
+
+        # for all the points in the path
+        # check neighbouring cells
+        # if the lowest number in the cell or one above is found in a neighbouring cell
+        # it is a potential fork
+
+
+    def preprocess_state(self, state, handle):
+
+        ret = {}
+
+        ret["conflicting_agents"] = state[handle]["conflicting_agents"]
+        #ret["bypass"] = state[handle]["bypass"]
 
         # Single values
         conflict_all = np.zeros((len(self.env.agents), self.max_prediction_depth))
@@ -585,52 +728,8 @@ class GraphObsForRailEnv(ObservationBuilder):
                 #print(item)
                 temp[int(item)] = self.predicted_pos_coord[item][index]
 
-            unique_a = np.unique(temp,axis=0)
-            unique_count = len(unique_a)
-
-            for index1 in range(0,len(self.predicted_pos_coord)):
-                if index1 < unique_count*repetition:
-                    path[index][index1][0] = self.predicted_pos_coord[index1][index][0]
-                    path[index][index1][1] = self.predicted_pos_coord[index1][index][1]
-                #else:
-                #    path[index][index1][0] = np.nan
-                #    path[index][index1][1] = np.nan
-
-        return path
-
-
-    def _compute_overlapping_paths1(self,handle, state):
-
-        occ = np.zeros( (len(state), len(state[0])) , dtype=np.int8)
-
-
-        for j in range(0, len(state)):
-            if j != handle:
-                # you have two arrays
-                # find unique and sort them
-                unique_a, idx = np.unique(state[handle],axis=0, return_index=True)
-                unique_a = unique_a[np.argsort(idx)]
-                where = np.where((unique_a==(0.0, 0.0)).all(axis=1))
-                unique_a = np.delete(unique_a, where, axis=0)
-
-                unique_b, idy = np.unique(state[j],axis=0, return_index=True)
-                unique_b = unique_b[np.argsort(idy)]
-                where = np.where((unique_b==(0.0, 0.0)).all(axis=1))
-                unique_b = np.delete(unique_b, where, axis=0)
-
-                # find intersection
-                a = set((tuple(i) for i in unique_a))
-                b = set((tuple(i) for i in unique_b))
-                i_section = a.intersection(b)
-
-                masked_b = np.sum([[1 if x[0] == item[0] and x[1] == item[1] else 0 for x in state[handle]] for item in i_section ], axis=0)
-
-                occ[j] = masked_b
-        return occ
-
-
-    # More than overlapping paths, this function computes cells in common in the predictions
-    def _compute_overlapping_paths(self, handle):
+    # I need only conflicting agents from here
+    def _fill_occupancy(self, handle):
         """
         Function that checks overlapping paths, where paths take into account shortest path prediction, so time/speed,
         but not the fact that the agent is moving or not.
@@ -675,30 +774,31 @@ class GraphObsForRailEnv(ObservationBuilder):
         """
         occupancy = np.zeros(self.max_prediction_depth, dtype=int)
         conflicting_agents = set()
-        #overlapping_paths = self._compute_overlapping_paths(handle)
-        overlapping_paths = self._compute_overlapping_paths1(handle, path)
+        # overlapping_paths = self._compute_overlapping_paths(handle)
 
         # cells_sequence = self.cells_sequence[handle]
         # span_cells = []
-        for ts in range(self.max_prediction_depth):
-            if self.env.agents[handle].status in [RailAgentStatus.READY_TO_DEPART, RailAgentStatus.ACTIVE]:
-                occupancy[ts], conflicting_agents_ts = self._possible_conflict(handle, ts)
-                conflicting_agents.update(conflicting_agents_ts)
+        if self.env.agents[handle].status in [RailAgentStatus.READY_TO_DEPART, RailAgentStatus.ACTIVE]:
+            for ts in range(self.max_prediction_depth):
+                    occupancy[ts], conflicting_agents_ts = self._possible_conflict(handle, ts)
+                    conflicting_agents.update(conflicting_agents_ts)
 
         # If a conflict is predicted, then it makes sense to populate occupancy with overlapping paths
         # But only with THAT agent
-        # Because I could have overlapping paths but without conflict (TODO improve)
+        # Because I could have overlapping paths but without conflict
+        '''
         if len(conflicting_agents) != 0: # If there was conflict
             for ca in conflicting_agents:
                 for ts in range(self.max_prediction_depth):
                     occupancy[ts] = overlapping_paths[ca, ts] if occupancy[ts] == 0 else 1
+        '''
 
         # Occupancy is 0 for agents that are done - they don't perform actions anymore
 
         # the calculated occupancy is for the agents that have conflict and hence conflict occupancy
 
-        return occupancy, conflicting_agents, overlapping_paths
-
+        # return occupancy, conflicting_agents
+        return conflicting_agents
 
     def _possible_conflict(self, handle, ts):
         """
@@ -724,7 +824,7 @@ class GraphObsForRailEnv(ObservationBuilder):
 
         # Careful, int_pos, predicted_pos are not (y, x) but are given as int
         if int_pos in np.delete(self.predicted_pos[ts], handle, 0):
-            conflicting_agents = np.where(self.predicted_pos[ts] == int_pos)
+            conflicting_agents = np.where(self.predicted_pos[ts] == int_pos)  # x200
             for ca in conflicting_agents[0]:
                 if self.env.agents[ca].status == RailAgentStatus.ACTIVE:
                     if self.predicted_dir[ts][handle] != self.predicted_dir[ts][ca] and cell_transitions[self._reverse_dir(self.predicted_dir[ts][ca])] == 1:
@@ -895,4 +995,227 @@ class GraphObsForRailEnv(ObservationBuilder):
 
         return action
 
-    #################################################################################################
+    # With lists
+    def _predicted_conflicts(self):
+        """
+        Predict conflicts for all agents
+        :return: 
+        """
+        ca_ids = []
+        conflicting_agents = {a:set() for a in range(self.env.get_num_agents())}
+
+        for ts in range(self.max_prediction_depth - 1): # prediction_depth times
+            # Check for a conflict between ALL agents comparing current time step, previous and following 
+            pre_ts = max(0, ts - 1)
+            post_ts = min(self.max_prediction_depth - 1, ts + 1)
+            
+            # Find conflicting agent ids
+            # Find intersection of cells between two prediction (cell x == cell y) excluding conflicts with same agent id and there are conditions for conflict (is_conflict())
+            ts_ca_ids = [(i, j) for i, x in enumerate(self.predicted_pos[ts]) for j, y in enumerate(self.predicted_pos[ts]) if x == y and i != j and self.is_conflict(ts, ts, i, j)]
+            pre_ts_ca_ids = [(i, j) for i, x in enumerate(self.predicted_pos[ts]) for j, y in enumerate(self.predicted_pos[pre_ts]) if x == y and i != j and self.is_conflict(ts, pre_ts, i, j)]
+            post_ts_ca_ids =[(i, j) for i, x in enumerate(self.predicted_pos[ts]) for j, y in enumerate(self.predicted_pos[post_ts]) if x == y and i != j and self.is_conflict(ts, post_ts, i, j)]
+            
+            ca_ids = list(itertools.chain(ca_ids, ts_ca_ids, pre_ts_ca_ids, post_ts_ca_ids))
+        # Unique
+        ca_ids = list(set(ca_ids))
+        for ca_pair in ca_ids:
+            conflicting_agents[ca_pair[0]].add(ca_pair[1])
+        
+        return conflicting_agents
+            
+    # With numpy arrays
+    def _predicted_conflicts_2(self):
+        """
+        
+        :return: 
+        """
+        conflicting_agents = {a:set() for a in range(self.env.get_num_agents())}
+
+        ca_ids = []
+        np_predicted_pos = np.zeros((self.max_prediction_depth + 1, self.env.get_num_agents()))
+        for ts in range(self.max_prediction_depth):
+            np_predicted_pos[ts] = np.array(self.predicted_pos[ts])
+            
+        for ts in range(self.max_prediction_depth - 1):
+            pre_ts = max(0, ts - 1)
+            post_ts = min(self.max_prediction_depth - 1, ts + 1)
+            '''
+            ts_pos_array = np.array(self.predicted_pos[ts])
+            pre_ts_pos_array = np.array(self.predicted_pos[pre_ts])
+            post_ts_pos_array = np.array(self.predicted_pos[post_ts])
+            '''
+            
+            el, ind1, ind2 = np.intersect1d(np_predicted_pos[ts], np_predicted_pos[ts], return_indices=True)
+            ts_ids = [(ind1[e], ind2[e]) for e in range(len(el)) if ind1[e] != ind2[e] and self.is_conflict(ts, ts, ind1[e], ind2[e])]
+            el, ind1, ind2 = np.intersect1d(np_predicted_pos[ts], np_predicted_pos[pre_ts], return_indices=True)
+            pre_ts_ids = [(ind1[e], ind2[e]) for e in range(len(el)) if ind1[e] != ind2[e] and self.is_conflict(ts, pre_ts, ind1[e], ind2[e])]
+            el, ind1, ind2 = np.intersect1d(np_predicted_pos[ts], np_predicted_pos[post_ts], return_indices=True)
+            post_ts_ids = [(ind1[e], ind2[e]) for e in range(len(el)) if ind1[e] != ind2[e] and self.is_conflict(ts, post_ts, ind1[e], ind2[e])]
+
+            ca_ids = list(itertools.chain(ca_ids, ts_ids, pre_ts_ids, post_ts_ids))
+        # Unique
+        ca_ids = list(set(ca_ids))
+        for ca_pair in ca_ids:
+            conflicting_agents[ca_pair[0]].add(ca_pair[1])
+        return conflicting_agents
+
+    def is_conflict(self, ts1, ts2, handle, ca):
+            
+            if self.env.agents[handle].status in [RailAgentStatus.ACTIVE, RailAgentStatus.READY_TO_DEPART]:
+                cell_pos = self.predicted_pos_coord[ts1][handle]
+                int_direction = int(self.predicted_dir[ts1][handle])
+                cell_transitions = self.env.rail.get_transitions(int(cell_pos[0]), int(cell_pos[1]), int_direction)
+        
+                if self.env.agents[ca].status == RailAgentStatus.ACTIVE:
+                    if self.predicted_dir[ts1][handle] != self.predicted_dir[ts2][ca] and cell_transitions[self._reverse_dir(self.predicted_dir[ts2][ca])] == 1:
+                        if not (self._is_following(ca, handle)):
+                            return True
+                
+            return False
+    """
+    def _bfs_graph(self, handle: int = 0) -> {}:
+        #Build a graph (dict) of nodes, where nodes are identified by ids, graph is directed, depends on agent direction
+        #(that are tuples that represent the cell position, eg (11, 23))
+        #:param handle: agent id
+        #:return: 
+        obs_graph = defaultdict(list)  # Dict node (as pos) : adjacent nodes
+        visited_nodes = set()  # set
+        bfs_queue = []
+        done = False  # True if agent has reached its target
+
+        agent = self.env.agents[handle]
+        if agent.status == RailAgentStatus.READY_TO_DEPART:
+            agent_virtual_position = agent.initial_position
+        elif agent.status == RailAgentStatus.ACTIVE:
+            agent_virtual_position = agent.position
+        elif agent.status == RailAgentStatus.DONE:
+            agent_virtual_position = agent.target
+            done = True
+        else:
+            return None
+
+        agent_current_direction = agent.direction
+
+        # Push root node into the queue
+        root_node_obs = GraphObsForRailEnv.Node(cell_position=agent_virtual_position,
+                                                agent_direction=agent_current_direction,
+                                                is_target=done)
+        bfs_queue.append(root_node_obs)
+
+        # Perform BFS of depth = bfs_depth
+        for i in range(1, self.bfs_depth + 1):
+            # Temporary queue to store nodes that must be appended at the next pass
+            tmp_queue = []
+            while not len(bfs_queue) == 0:
+                current_node = bfs_queue.pop(0)
+                agent_position = current_node[0]
+
+                # Init node in the obs_graph (if first time)
+                if not agent_position in obs_graph.keys():
+                    obs_graph[agent_position] = []
+
+                agent_current_direction = current_node[1]
+                # Get cell transitions given agent direction
+                possible_transitions = self.env.rail.get_transitions(*agent_position, agent_current_direction)
+
+                orientation = agent_current_direction
+                possible_branch_directions = []
+                # Build list of possible branching directions from cell
+                for j, branch_direction in enumerate([(orientation + j) % 4 for j in range(-1, 3)]):
+                    if possible_transitions[branch_direction]:
+                        possible_branch_directions.append(branch_direction)
+                for branch_direction in possible_branch_directions:
+                    # Gets adjacent cell and start exploring from that for possible fork points
+                    neighbour_cell = get_new_position(agent_position, branch_direction)
+                    adj_node = self._explore_path(handle, neighbour_cell, branch_direction)
+                    if not (*adj_node[0], adj_node[1]) in visited_nodes:
+                        # For now I'm using as key the agent_position tuple
+                        obs_graph[agent_position].append(adj_node)
+                        visited_nodes.add((*adj_node[0], adj_node[1]))
+                        tmp_queue.append(adj_node)
+            # Add all the nodes of the next level to the BFS queue
+            for el in tmp_queue:
+                bfs_queue.append(el)
+
+        # After the last pass add adj nodes to the obs graph wih empty lists
+        for el in bfs_queue:
+            if not el[0] in obs_graph.keys():
+                obs_graph[el[0]] = []
+                # visited_nodes.add((*el[0], el[1]))
+        # For obs rendering
+        # self.env.dev_obs_dict[handle] = [(node[0], node[1]) for node in visited_nodes]
+
+        # Build graph with graph-tool library for visualization
+        # g = build_graph(obs_graph, handle)
+
+        return obs_graph
+
+    def _explore_path(self, handle, position, direction):
+        #Given agent handle, current position, and direction, explore that path until a new branching point is found.
+        #:param handle: agent id
+        #:param position: agent position as cell 
+        #:param direction: agent direction
+        #:return: a tuple Node with its features
+
+        # Continue along direction until next switch or
+        # until no transitions are possible along the current direction (i.e., dead-ends)
+        # We treat dead-ends as nodes, instead of going back, to avoid loops
+        exploring = True
+        # 4 different cases to have a branching point:
+        last_is_switch = False
+        last_is_dead_end = False
+        last_is_terminal = False  # wrong cell or cycle
+        last_is_target = False  # target was reached
+        agent = self.env.agents[handle]
+        visited = OrderedSet()
+
+        while True:
+
+            if (position[0], position[1], direction) in visited:
+                last_is_terminal = True
+                break
+            visited.add((position[0], position[1], direction))
+
+            # If the target node is encountered, pick that as node. Also, no further branching is possible.
+            if np.array_equal(position, self.env.agents[handle].target):
+                last_is_target = True
+                break
+
+            cell_transitions = self.env.rail.get_transitions(*position, direction)
+            num_transitions = np.count_nonzero(cell_transitions)
+            cell_transitions_bitmap = bin(self.env.rail.get_full_transitions(*position))
+            total_transitions = cell_transitions_bitmap.count("1")
+
+            if num_transitions == 1:
+                # Check if dead-end (1111111111111111), or if we can go forward along direction
+                if total_transitions == 1:
+                    last_is_dead_end = True
+                    break
+
+                if not last_is_dead_end:
+                    # Keep walking through the tree along `direction`
+                    # convert one-hot encoding to 0,1,2,3
+                    direction = np.argmax(cell_transitions)
+                    position = get_new_position(position, direction)
+
+            elif num_transitions > 1:
+                last_is_switch = True
+                break
+
+            elif num_transitions == 0:
+                # Wrong cell type, but let's cover it and treat it as a dead-end, just in case
+                print("WRONG CELL TYPE detected in tree-search (0 transitions possible) at cell", position[0],
+                      position[1], direction)
+                last_is_terminal = True
+                break
+        # Out of while loop - a branching point was found
+
+        # TODO Here to save more features in a node
+        node = GraphObsForRailEnv.Node(cell_position=position,
+                                       agent_direction=direction,
+                                       is_target=last_is_target)
+
+        return node
+
+    """
+
