@@ -4,6 +4,6 @@
   "authors": ["cit-ec.de"],
   "description": "sample description about your awesome agent",
   "license": "MIT",
-  "debug": false
+  "debug": true
 }
 
