@@ -25,7 +25,8 @@ class TestBattery():
 
     def reset(self):
         self.memory_SC = [[[dict() for x in range(self.env.width)] for y in range(self.env.height)] for z in range(self.env.number_of_agents)]
-        self.state_machine_actions_history = [0 for x in range(self.env.number_of_agents)]
+        # self.state_machine_actions_history = [0 for x in range(self.env.number_of_agents)]
+        self.state_machine_actions_history = [0 for x in range(len(self.env.dones)-1)]
         memory = self.read_memory()
         self.memory = np.ones((self.env.number_of_agents, self.env.width, self.env.height), dtype=np.int16)
 
@@ -93,6 +94,8 @@ class TestBattery():
                         next_pos_a = (current_pos_a[0], current_pos_a[1]+1)
                     elif val_cur_pos < self.memory[0][a.handle][current_pos_a[0] + 1][current_pos_a[1]]:
                         next_pos_a = (current_pos_a[0] + 1, current_pos_a[1])
+                    else:
+                        next_pos_a = current_pos_a
                 else:
                     next_pos_a = current_pos_a
 
@@ -125,6 +128,8 @@ class TestBattery():
                                             next_pos_ca = (ca_position[0], ca_position[1]+1)
                                         elif val_cur_pos_ca < self.memory[0][k][ca_position[0] + 1][ca_position[1]]:
                                             next_pos_ca = (ca_position[0] + 1, ca_position[1])
+                                        else:
+                                            next_pos_a = current_pos_a
                                     else:
                                         next_pos_ca = ca_position
 

@@ -95,8 +95,8 @@ class GraphObsForRailEnv(ObservationBuilder):
         self.observations = {}
         self.preprocessed_observation = {}
         self.direction = {}
-        #for a in self.env.agents:
-        #    self.prediction_dict[a.handle] = {}
+        for a in self.env.agents:
+           self.prediction_dict[a.handle] = {}
 
         self.path_to_dest = np.zeros((len(self.env.agents), self.env.height, self.env.width), dtype=np.int16)
         self.conflict_in_time = np.zeros((len(self.env.agents), self.max_prediction_depth), dtype=np.int8)
