@@ -70,17 +70,12 @@ class ShortestPathPredictorForRailEnv(PredictionBuilder):
             The prediction at 0 is the current position, direction etc.
         """
         agents = self.env.agents
-        if handle:
+        if not handle is None:
             agents = [self.env.agents[handle]]
         distance_map: DistanceMap = self.env.distance_map
 
         shortest_paths = get_shortest_paths(distance_map, max_depth=self.max_depth)
         self.shortest_paths = shortest_paths
-
-        return self.get_middle(agents, shortest_paths)
-
-
-    def get_middle(self, agents, shortest_paths):
 
         prediction_dict = {}
         for agent in agents:
@@ -136,9 +131,9 @@ class ShortestPathPredictorForRailEnv(PredictionBuilder):
 
             # TODO: very bady side effects for visualization only: hand the dev_pred_dict back instead of setting on env!
             self.env.dev_pred_dict[agent.handle] = visited
-            prediction_dict[agent.handle] = prediction
+            #prediction_dict[agent.handle] = prediction
 
-        return prediction_dict
+        return prediction
 
     '''
     Given prediction dict for all agents, return sequence of cells walked in the prediction as a dict
@@ -150,10 +145,11 @@ class ShortestPathPredictorForRailEnv(PredictionBuilder):
 
         cells_sequence = defaultdict(list)
         agents = self.env.agents
-        for a in agents:
-            for step in prediction_dict[a.handle]:
-                cell_pos = (step[1], step[2])  # Takes (yi, xi)
-                cells_sequence[a.handle].append(cell_pos)
+        if len(prediction_dict) == self.env.number_of_agents:
+            for a in agents:
+                for step in prediction_dict[a.handle]:
+                    cell_pos = (step[1], step[2])  # Takes (yi, xi)
+                    cells_sequence[a.handle].append(cell_pos)
 
         return cells_sequence
 

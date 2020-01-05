@@ -81,7 +81,7 @@ while True:
     number_of_agents = len(local_env.agents)
 
     sm = stateMachine()
-    tb = TestBattery(local_env)
+    tb = TestBattery(local_env, observation_builder)
 
     # Now we enter into another infinite loop where we 
     # compute the actions for all the individual steps in this episode
@@ -101,7 +101,13 @@ while True:
     reward_sum = 0
     num_done_agents = 0
     all_done = False
-    
+
+    state_machine_action = {}
+    for i in range(local_env.number_of_agents):
+        state_machine_action[i] = 0
+
+    tb.reset()
+
     while True:
 
         #####################################################################
@@ -114,7 +120,7 @@ while True:
 
         # Test battery
         # see test_battery.py
-        triggers = tb.tests(state, prediction_depth)
+        triggers = tb.tests(state, prediction_depth, state_machine_action)
         # state machine based on triggers of test battery
         # see state_machine.py
         state_machine_action = sm.act(triggers) # State machine picks action
