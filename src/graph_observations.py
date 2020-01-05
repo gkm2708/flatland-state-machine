@@ -225,7 +225,7 @@ class GraphObsForRailEnv(ObservationBuilder):
 
 
     def update_memory_every_step(self):
-        print("updating")
+        #print("updating")
         for a in self.env.agents:
             for i in range(0, self.max_prediction_depth - 1):
                 self.conflict_in_time[a.handle][i] = self.conflict_in_time[a.handle][i+1]
@@ -1038,7 +1038,7 @@ class GraphObsForRailEnv(ObservationBuilder):
                     action = RailEnvActions.MOVE_FORWARD
                 else:
                     action = RailEnvActions.DO_NOTHING
-                    print(handle, agent_dir, agent_pos, next_pos)
+                    #print(handle, agent_dir, agent_pos, next_pos)
 
 
 
@@ -1055,7 +1055,7 @@ class GraphObsForRailEnv(ObservationBuilder):
                     action = RailEnvActions.MOVE_FORWARD
                 else:
                     action = RailEnvActions.DO_NOTHING
-                    print(handle, agent_dir, agent_pos, next_pos)
+                    #print(handle, agent_dir, agent_pos, next_pos)
 
 
 
@@ -1072,7 +1072,7 @@ class GraphObsForRailEnv(ObservationBuilder):
                     action = RailEnvActions.MOVE_FORWARD
                 else:
                     action = RailEnvActions.DO_NOTHING
-                    print(handle, agent_dir, agent_pos, next_pos)
+                    #print(handle, agent_dir, agent_pos, next_pos)
 
 
 
@@ -1089,7 +1089,7 @@ class GraphObsForRailEnv(ObservationBuilder):
                     action = RailEnvActions.MOVE_FORWARD
                 else:
                     action = RailEnvActions.DO_NOTHING
-                    print(handle, agent_dir, agent_pos, next_pos)
+                    #print(handle, agent_dir, agent_pos, next_pos)
 
                 #else:
                 #    print(handle, agent_dir, agent_pos, next_pos)
