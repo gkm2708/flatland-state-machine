@@ -101,44 +101,45 @@ class TestBattery():
 
                 # check that next cell
                 #   if next cell has a conflicting agent
-                if len(self.memory_SC[a.handle][next_pos_a[0]][next_pos_a[1]]) > 0:
+                if len(self.memory_SC)-1 >= a.handle:
+                    if len(self.memory_SC[a.handle][next_pos_a[0]][next_pos_a[1]]) > 0:
 
-                    final_ca = {}
-                    #   check if another agent is in conflicting span
-                    for k in self.memory_SC[a.handle][next_pos_a[0]][next_pos_a[1]].keys():
-                        final1["A_entering_CZ"] = 1
+                        final_ca = {}
+                        #   check if another agent is in conflicting span
+                        for k in self.memory_SC[a.handle][next_pos_a[0]][next_pos_a[1]].keys():
+                            final1["A_entering_CZ"] = 1
 
-                        ca_position = self.env.agents[k].position
-                        if not ca_position is None:
-                            for item in self.memory_SC[a.handle][next_pos_a[0]][next_pos_a[1]][k]:
-                                if item[0] == ca_position[0] and item[1] == ca_position[1]:
-                                    final1["B_already_in_CZ"] = 1
-                                    final_ca[k] = k
-                                else:
-
-                                    val_cur_pos_ca = self.memory[0][k][ca_position[0]][ca_position[1]]
-
-                                    # in memory map check surrounding to find next cell
-                                    if val_cur_pos_ca < self.memory[0][k][ca_position[0] - 1][ca_position[1]]:
-                                        next_pos_ca = (ca_position[0] - 1, ca_position[1])
-                                    elif val_cur_pos_ca < self.memory[0][k][ca_position[0]][ca_position[1] - 1]:
-                                        next_pos_ca = (ca_position[0], ca_position[1]-1)
-                                    elif ca_position[0] + 1 < self.env.width and ca_position[1] + 1 < self.env.height:
-                                        if val_cur_pos_ca < self.memory[0][k][ca_position[0]][ca_position[1] + 1]:
-                                            next_pos_ca = (ca_position[0], ca_position[1]+1)
-                                        elif val_cur_pos_ca < self.memory[0][k][ca_position[0] + 1][ca_position[1]]:
-                                            next_pos_ca = (ca_position[0] + 1, ca_position[1])
-                                        else:
-                                            next_pos_a = current_pos_a
-                                    else:
-                                        next_pos_ca = ca_position
-
-                                    # check if the next position of this agent is one in the current list of conflicting keys
-                                    if item[0] == next_pos_ca[0] and item[1] == next_pos_ca[1]:
-                                        final1["B_entering_CZ"] = 1
+                            ca_position = self.env.agents[k].position
+                            if not ca_position is None:
+                                for item in self.memory_SC[a.handle][next_pos_a[0]][next_pos_a[1]][k]:
+                                    if item[0] == ca_position[0] and item[1] == ca_position[1]:
+                                        final1["B_already_in_CZ"] = 1
                                         final_ca[k] = k
+                                    else:
 
-                    final1["ca"] = final_ca
+                                        val_cur_pos_ca = self.memory[0][k][ca_position[0]][ca_position[1]]
+
+                                        # in memory map check surrounding to find next cell
+                                        if val_cur_pos_ca < self.memory[0][k][ca_position[0] - 1][ca_position[1]]:
+                                            next_pos_ca = (ca_position[0] - 1, ca_position[1])
+                                        elif val_cur_pos_ca < self.memory[0][k][ca_position[0]][ca_position[1] - 1]:
+                                            next_pos_ca = (ca_position[0], ca_position[1]-1)
+                                        elif ca_position[0] + 1 < self.env.width and ca_position[1] + 1 < self.env.height:
+                                            if val_cur_pos_ca < self.memory[0][k][ca_position[0]][ca_position[1] + 1]:
+                                                next_pos_ca = (ca_position[0], ca_position[1]+1)
+                                            elif val_cur_pos_ca < self.memory[0][k][ca_position[0] + 1][ca_position[1]]:
+                                                next_pos_ca = (ca_position[0] + 1, ca_position[1])
+                                            else:
+                                                next_pos_a = current_pos_a
+                                        else:
+                                            next_pos_ca = ca_position
+
+                                        # check if the next position of this agent is one in the current list of conflicting keys
+                                        if item[0] == next_pos_ca[0] and item[1] == next_pos_ca[1]:
+                                            final1["B_entering_CZ"] = 1
+                                            final_ca[k] = k
+
+                        final1["ca"] = final_ca
 
             else:
                 final1["A_entering_CZ"] = 0
