@@ -137,11 +137,15 @@ def main(args, dir):
 			state_machine_action = sm.act(triggers) # State machine picks action
 
 			for a in range(env.get_num_agents()):
-				if info['action_required'][a]:
-					#railenv_action = observation_builder.choose_railenv_action(a, state_machine_action[a])
-					railenv_action = observation_builder.choose_railenv_action(a, state_machine_action[a])
-					state_machine_action_dict.update({a: state_machine_action})
-					railenv_action_dict.update({a: railenv_action})
+				#if info['action_required'][a]:
+				#	#railenv_action = observation_builder.choose_railenv_action(a, state_machine_action[a])
+				#	railenv_action = observation_builder.choose_railenv_action(a, state_machine_action[a])
+				#	state_machine_action_dict.update({a: state_machine_action})
+				#	railenv_action_dict.update({a: railenv_action})
+				# railenv_action = observation_builder.choose_railenv_action(a, state_machine_action[a])
+				railenv_action = observation_builder.choose_railenv_action(a, state_machine_action[a])
+				state_machine_action_dict.update({a: state_machine_action})
+				railenv_action_dict.update({a: railenv_action})
 
 			state, reward, done, info = env.step(railenv_action_dict)  # Env step
 
@@ -194,8 +198,10 @@ def main(args, dir):
 				all_done = True
 				break
 
-		time_taken = time.time() - start_time # Time taken for one episode
+
 		total_step_taken += step_taken
+
+		time_taken = time.time() - start_time # Time taken for one episode
 		total_episodes = ep
 
 		# Time metrics - too precise
@@ -242,7 +248,7 @@ if __name__ == '__main__':
 	parser.add_argument('--height', type=int, default=20, help='Environment height')
 	parser.add_argument('--num-agents', type=int, default=4, help='Number of agents in the environment')
 	parser.add_argument('--max-num-cities', type=int, default=2, help='Maximum number of cities where agents can start or end')
-	parser.add_argument('--seed', type=int, default=5, help='Seed used to generate grid environment randomly')
+	parser.add_argument('--seed', type=int, default=54, help='Seed used to generate grid environment randomly')
 	parser.add_argument('--grid-mode', type=bool, default=True, help='Type of city distribution, if False cities are randomly placed')
 	parser.add_argument('--max-rails-between-cities', type=int, default=3, help='Max number of tracks allowed between cities, these count as entry points to a city')
 	parser.add_argument('--max-rails-in-city', type=int, default=3, help='Max number of parallel tracks within a city allowed')
@@ -252,11 +258,11 @@ if __name__ == '__main__':
 	parser.add_argument('--observation-builder', type=str, default='GraphObsForRailEnv', help='Class to use to build observation for agent')
 	parser.add_argument('--predictor', type=str, default='ShortestPathPredictorForRailEnv', help='Class used to predict agent paths and help observation building')
 	parser.add_argument('--prediction-depth', type=int, default=200, help='Prediction depth for shortest path strategy, i.e. length of a path')
-	parser.add_argument('--num-episodes', type=int, default=10, help='Number of episodes to run')
+	parser.add_argument('--num-episodes', type=int, default=1, help='Number of episodes to run')
 	parser.add_argument('--debug', action='store_true', default=False, help='Print debug info')
 	parser.add_argument('--generate-seeds', type=str, default='', help='--generate-seeds 6,12,13,14')
 	parser.add_argument('--generate-baseline', type=bool, default=False, help='--generate-baseline True/False')
-	parser.add_argument('--save-image', type=int, default=1, help='Save image')
+	parser.add_argument('--save-image', type=int, default=0, help='Save image')
 	parser.add_argument('--render', action='store_true', default=True, help="Render environments with RenderTool")
 
 	args = parser.parse_args()

@@ -74,10 +74,12 @@ class TestBattery():
             # check if agent is entering a conflict zone
             # find current position
             current_pos_a = a.position
+
             # if a valid position
             if not current_pos_a is None:
                 final1["A_entering_CZ"] = 0
                 final1["B_entering_CZ"] = 0
+                final1["A_already_in_CZ"] = 0
                 final1["B_already_in_CZ"] = 0
                 final1["ca"] = {}
 
@@ -85,6 +87,8 @@ class TestBattery():
                 val_cur_pos = self.memory[0][a.handle][current_pos_a[0]][current_pos_a[1]]
 
                 # in memory map check surrounding to find next cell
+                # Next cell is with higher time id than current
+                next_pos_a = current_pos_a
                 if val_cur_pos < self.memory[0][a.handle][current_pos_a[0]-1][current_pos_a[1]]:
                     next_pos_a = (current_pos_a[0]-1, current_pos_a[1])
                 elif val_cur_pos < self.memory[0][a.handle][current_pos_a[0]][current_pos_a[1]-1]:
@@ -94,58 +98,76 @@ class TestBattery():
                         next_pos_a = (current_pos_a[0], current_pos_a[1]+1)
                     elif val_cur_pos < self.memory[0][a.handle][current_pos_a[0] + 1][current_pos_a[1]]:
                         next_pos_a = (current_pos_a[0] + 1, current_pos_a[1])
-                    else:
-                        next_pos_a = current_pos_a
-                else:
-                    next_pos_a = current_pos_a
+                    #else:
+                    #    next_pos_a = current_pos_a
+                #else:
+                #    next_pos_a = current_pos_a
 
                 # check that next cell
-                #   if next cell has a conflicting agent
+                # if next cell has a conflicting agent
                 if len(self.memory_SC)-1 >= a.handle:
                     if len(self.memory_SC[a.handle][next_pos_a[0]][next_pos_a[1]]) > 0:
 
                         final_ca = {}
-                        #   check if another agent is in conflicting span
+
+                        # check if another agent is in conflicting span
                         for k in self.memory_SC[a.handle][next_pos_a[0]][next_pos_a[1]].keys():
                             final1["A_entering_CZ"] = 1
 
+                            a_position = self.env.agents[a.handle].position
                             ca_position = self.env.agents[k].position
                             if not ca_position is None:
                                 for item in self.memory_SC[a.handle][next_pos_a[0]][next_pos_a[1]][k]:
+
+                                    val_cur_pos_ca = self.memory[0][k][ca_position[0]][ca_position[1]]
+
+                                    # in memory map check surrounding to find next cell
+                                    ca_next_pos = ca_position
+                                    if val_cur_pos_ca < self.memory[0][k][ca_position[0] - 1][ca_position[1]]:
+                                        ca_next_pos = (ca_position[0] - 1, ca_position[1])
+                                    elif val_cur_pos_ca < self.memory[0][k][ca_position[0]][ca_position[1] - 1]:
+                                        ca_next_pos = (ca_position[0], ca_position[1]-1)
+                                    elif ca_position[0] + 1 < self.env.width and ca_position[1] + 1 < self.env.height:
+                                        if val_cur_pos_ca < self.memory[0][k][ca_position[0]][ca_position[1] + 1]:
+                                            ca_next_pos = (ca_position[0], ca_position[1]+1)
+                                        elif val_cur_pos_ca < self.memory[0][k][ca_position[0] + 1][ca_position[1]]:
+                                            ca_next_pos = (ca_position[0] + 1, ca_position[1])
+                                        #else:
+                                        #    ca_next_pos = current_pos_a
+                                    #else:
+                                    #    ca_next_pos = ca_position
+
+                                    # check if the next position of this agent is one in the current list of conflicting keys
+                                    if item[0] == ca_next_pos[0] and item[1] == ca_next_pos[1]:
+                                        #final_ca["B_entering_CZ"] = 1
+                                        final1["B_entering_CZ"] = 1
+                                        final_ca[k] = k
+
                                     if item[0] == ca_position[0] and item[1] == ca_position[1]:
+                                        #final_ca["B_already_in_CZ"] = 1
                                         final1["B_already_in_CZ"] = 1
                                         final_ca[k] = k
-                                    else:
 
-                                        val_cur_pos_ca = self.memory[0][k][ca_position[0]][ca_position[1]]
+                                    if item[0] == a_position[0] and item[1] == a_position[1]:
+                                        final1["A_already_in_CZ"] = 1
+                                        #final_ca[k] = k
 
-                                        # in memory map check surrounding to find next cell
-                                        if val_cur_pos_ca < self.memory[0][k][ca_position[0] - 1][ca_position[1]]:
-                                            next_pos_ca = (ca_position[0] - 1, ca_position[1])
-                                        elif val_cur_pos_ca < self.memory[0][k][ca_position[0]][ca_position[1] - 1]:
-                                            next_pos_ca = (ca_position[0], ca_position[1]-1)
-                                        elif ca_position[0] + 1 < self.env.width and ca_position[1] + 1 < self.env.height:
-                                            if val_cur_pos_ca < self.memory[0][k][ca_position[0]][ca_position[1] + 1]:
-                                                next_pos_ca = (ca_position[0], ca_position[1]+1)
-                                            elif val_cur_pos_ca < self.memory[0][k][ca_position[0] + 1][ca_position[1]]:
-                                                next_pos_ca = (ca_position[0] + 1, ca_position[1])
-                                            else:
-                                                next_pos_a = current_pos_a
-                                        else:
-                                            next_pos_ca = ca_position
+                                    #final_ca["speed"] = self.speed(a, k)
 
-                                        # check if the next position of this agent is one in the current list of conflicting keys
-                                        if item[0] == next_pos_ca[0] and item[1] == next_pos_ca[1]:
-                                            final1["B_entering_CZ"] = 1
-                                            final_ca[k] = k
-
+                        # find immediate conflict
                         final1["ca"] = final_ca
 
+            # have an all zero test battery result for invalid points
             else:
+                final_ca = {}
                 final1["A_entering_CZ"] = 0
                 final1["B_entering_CZ"] = 0
+                final1["A_already_in_CZ"] = 0
                 final1["B_already_in_CZ"] = 0
-                final1["ca"] = {}
+                #final_ca["B_entering_CZ"] = 0
+                #final_ca["B_already_in_CZ"] = 0
+                final1["ca"] = final_ca
+                #final1["ca"] = final_ca
 
             final[a.handle] = final1
 
@@ -157,63 +179,58 @@ class TestBattery():
 
     def update_conflict_data(self, memory, handle):
         for b in range(len(memory[0])):
+
+            # compare one agent(handle) (predicted and hence potential change induced) with every other agent
             if handle != b:
 
-                # individual occupancy map
+                # one-hot coded individual occupancy map
+                # for handle vs. other agent
                 conflict_map_handle = np.asarray([[1 if item > 0 else 0 for item in row] for row in memory[0][handle]])
                 conflict_map_b = np.asarray([[1 if item > 0 else 0 for item in row] for row in memory[0][b]])
 
                 # conflict map comparing two agents
+                # add both the maps and 2's represent conflict region
                 conflict_map = conflict_map_handle + conflict_map_b
+                # One-hot code conflict region
                 conflict_map = np.asarray([[1 if item > 1 else 0 for item in row] for row in conflict_map])
-                #print(handle, b,"\n", conflict_map)
 
-
-                # direction
+                # time of occupancy in conflict region - for both the agent
                 direction_map_handle = np.multiply(memory[0][handle], conflict_map)
                 direction_map_b = np.multiply(memory[0][b], conflict_map)
-                #print(handle,b,"\n", direction_map_handle, direction_map_b)
 
-                # time value for conflict
+                # simple check to determine if there is a time conflict
+                # at least one none zero value in time of occupancy in conflict region
                 conflict_check_id = np.argwhere(direction_map_handle > 0)
 
-                #conflict_check_id_b = np.argwhere(direction_map_b > 0)
-
-                #print("ID's where a conflict may happen",handle,b,"\n", conflict_check_id)
+                # If at lest one none zero value
                 if len(conflict_check_id) > 0:
 
+                    # find two random points in the conflict region of both agents
+                    # compare time for both agents on these points
+                    # if both the agents have either increasing or decreasing time then same direction
                     val_handle_1 = memory[0][handle][conflict_check_id[0][0]][conflict_check_id[0][1]]
                     val_handle_2 = memory[0][handle][conflict_check_id[-1][0]][conflict_check_id[-1][1]]
                     val_b_1 = memory[0][b][conflict_check_id[0][0]][conflict_check_id[0][1]]
                     val_b_2 = memory[0][b][conflict_check_id[-1][0]][conflict_check_id[-1][1]]
 
+                    # if opposite direction
                     if (val_handle_2 - val_handle_1 >= 0 and val_b_2 - val_b_1 <= 0) \
                                 or (val_handle_2 - val_handle_1 <= 0 and val_b_2 - val_b_1 >= 0):
-                        #print("same direction")
-                        #pass
-                        #else:
-                        #print("check further for time overlap")
 
+                        # find the start and end of time overlap for main agent
                         val_handle_max = np.max(direction_map_handle)
-                        val_b_max = np.max(direction_map_b)
                         val_handle_min = np.min([np.nonzero(direction_map_handle)])
+                        # and conflicting agent
+                        val_b_max = np.max(direction_map_b)
                         val_b_min = np.min([np.nonzero(direction_map_b)])
 
-                        #print(val_handle_max, val_handle_min, val_b_max, val_b_min)
-
-                        if val_handle_min > val_b_max > val_handle_max or val_b_min > val_handle_max > val_b_max\
-                                or val_b_min < val_b_max < val_b_max or val_handle_min < val_b_max < val_handle_max:
-                            #print("no time conflict")
-                            pass
-                        else:
-                            #print("time conflict")
+                        # based on the time occupancy
+                        # compare the starting and ending time
+                        # if time conflict - add these sections as conflicting regions
+                        if val_b_min <= val_handle_min <= val_b_max or val_handle_min <= val_b_min <= val_handle_max:
                             # write these coordinates as the conflict
-
                             # for both the agents
                             # for all the coordinates
-                            # write
-
-                            #conflict
                             for item in conflict_check_id:
 
                                 dict_temp = self.memory_SC[handle][item[0]][item[1]]

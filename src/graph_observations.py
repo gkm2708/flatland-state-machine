@@ -95,8 +95,8 @@ class GraphObsForRailEnv(ObservationBuilder):
         self.observations = {}
         self.preprocessed_observation = {}
         self.direction = {}
-        for a in self.env.agents:
-           self.prediction_dict[a.handle] = {}
+        #for a in self.env.agents:
+        #   self.prediction_dict[a.handle] = {}
 
         self.path_to_dest = np.zeros((len(self.env.agents), self.env.height, self.env.width), dtype=np.int16)
         self.conflict_in_time = np.zeros((len(self.env.agents), self.max_prediction_depth), dtype=np.int8)
@@ -129,6 +129,68 @@ class GraphObsForRailEnv(ObservationBuilder):
 
 
 
+    def get_many_parts_initial(self, handles):
+
+        self.num_active_agents = 0
+
+        for a in handles:
+            agent = self.env.agents[a]
+
+            if agent.status == RailAgentStatus.ACTIVE:
+                self.num_active_agents += 1
+
+            self.prediction_dict[a] = self.predictor.get(a)
+
+        for a in handles:
+
+            # cell sequence changes hence calculation of direction should change
+            if self.prediction_dict and len(self.prediction_dict) == self.env.number_of_agents:
+
+                self.cells_sequence = self.predictor.compute_cells_sequence(self.prediction_dict)
+                # Useful to check if occupancy is correctly computed
+
+                for t in range(self.max_prediction_depth):
+                    pos_list = []
+                    dir_list = []
+                    for a in handles:
+                        if self.prediction_dict[a] is None:
+                            continue
+                        #print(self.prediction_dict[a][t][1:3])
+                        pos_list.append(self.prediction_dict[a][t][1:3])
+                        dir_list.append(self.prediction_dict[a][t][3])
+                    self.predicted_pos_coord.update({t: pos_list})
+                    self.predicted_pos.update({t: coordinate_to_position(self.env.width, pos_list)})
+                    self.predicted_dir.update({t: dir_list})
+
+                for b in range(len(self.env.agents)):
+                    pos_list = []
+                    for ts in range(self.max_prediction_depth):
+                        pos_list.append(self.predicted_pos[ts][b])  # Use int positions
+                    self.predicted_pos_list.update({b: pos_list})
+
+                for b in handles:
+                    self.conflicting_agents[b] = set()
+
+                self.conflicting_agents = self._predicted_conflicts()
+
+                if self.first_step:
+                    for b in handles:
+                        # change this also to work on a handle only
+                        self.path_all[b] = self.path(b)
+                        # change this also to work on a handle only
+                        self.direction[b] = self.absolute_dir_dict(b)
+                        # maintain historical observations
+                        self.observations[b] = self.get(self.path_all, self.direction, b)
+                        self.preprocessed_observation[b] = self.preprocess_state(self.observations, b)
+                        self.update_path_memory_at_recalculate(b)
+                else:
+                    self.path_all[a] = self.path(a)
+                    # change this also to work on a handle only
+                    self.direction[a] = self.absolute_dir_dict(a)
+                    # maintain historical observations
+                    self.observations[a] = self.get(self.path_all, self.direction, a)
+                    self.preprocessed_observation[a] = self.preprocess_state(self.observations, a)
+                    self.update_path_memory_at_recalculate(a)
 
 
 
@@ -156,6 +218,7 @@ class GraphObsForRailEnv(ObservationBuilder):
                     for a in handles:
                         if self.prediction_dict[a] is None:
                             continue
+                        #print(self.prediction_dict[a][t][1:3])
                         pos_list.append(self.prediction_dict[a][t][1:3])
                         dir_list.append(self.prediction_dict[a][t][3])
                     self.predicted_pos_coord.update({t: pos_list})
@@ -488,7 +551,7 @@ class GraphObsForRailEnv(ObservationBuilder):
                 alt_cost_dict = self.evaluate_cost(dict_temp)
 
                 if np.sum(alt_cost_dict) < best_cost:
-                    #print(" !!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Better Path found", best_cost, np.sum(alt_cost_dict), alt_cost_dict)
+                    #bg (" !!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Better Path found", best_cost, np.sum(alt_cost_dict), alt_cost_dict)
                     return dict_temp, np.sum(alt_cost_dict)
 
         return dict_temp_temp, best_cost
